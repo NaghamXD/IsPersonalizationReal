@@ -59,10 +59,11 @@ class vsvig_dataset(Dataset):
         # --- PREVIOUS FIX 1: NORMALIZE KEYPOINTS ---
         # Ensure kpts are float
         kpts = kpts.float()
+          
         kpts[:, :, 0] = kpts[:, :, 0] / 1920.0
         kpts[:, :, 1] = kpts[:, :, 1] / 1080.0
         
-        '''        
+        '''
         # --- PREVIOUS FIX 2: ADD CONFIDENCE CHANNEL (2 -> 3 CHANNELS) ---
         # Current shape: (30, 15, 2) -> We need: (30, 15, 3)
         confidence = torch.ones((30, 15, 1), dtype=kpts.dtype)
@@ -119,7 +120,7 @@ def train():
         
         model = model.to(device)
         MSE = nn.MSELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-6)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.1)
 
         # --- RESUME LOGIC ---
