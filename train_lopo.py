@@ -14,7 +14,7 @@ FOLDS_FOLDER = os.path.join(DATA_FOLDER, 'folds')
 MODEL_SAVE_ROOT = 'checkpoints_lopo'
 
 # Default ID if running without arguments
-DEFAULT_TEST_PATIENT = 'Pat01'
+DEFAULT_TEST_PATIENT = 'Pat03'
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -141,7 +141,10 @@ def train():
     
     # 5. Training Loop
     epochs = 200
-    
+    # Add before training loop
+    patience = 3
+    trigger_times = 0
+
     for e in range(start_epoch, epochs):
         train_loss = 0.0
         model.train()
@@ -193,6 +196,13 @@ def train():
                 print(f' >> ✅ New Best for {test_patient}!')
                 min_valid_loss = avg_val_loss
                 torch.save(model.state_dict(), path_to_best_model)
+                trigger_times = 0  # Reset patience counter
+            else:
+                trigger_times += 1
+                print(f' >> ❌ No Improvement. Trigger Times: {trigger_times}/{patience}')
+                if trigger_times >= patience:
+                    print(f' >> ⏸️ Early stopping triggered for {test_patient} at epoch {e+1}.')
+                    break  # Exit training loop
             history['val_loss'].append(avg_val_loss)
             history['val_rmse'].append(avg_rmse)
 

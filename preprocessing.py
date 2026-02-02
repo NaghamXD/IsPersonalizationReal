@@ -144,103 +144,282 @@ def calculate_label_formal(current_time, eeg_start, clinical_start, k=5):
     label = (np.exp(k * x) - 1) / (np.exp(k) - 1)
     return float(label)
 
-def process_maps_to_coords(heatmap, paf, scale, orig_h, orig_w):
+def process_maps_to_coords(heatmap, paf, scale, orig_h, orig_w, prev_kpts=None):
     """
-    Processes pre-computed heatmaps to extract coordinates.
+    1. Tries PAF Grouping (Best).
+    2. Fallback: ROI Search around previous frame (Spatial Consistency).
+    3. Last Resort: Global Maxima (only if no history).
     """
+    
+    # 1. Run Standard Extraction
     all_kpts, total = [], 0
     for i in range(18):
         total += extract_keypoints(heatmap[i], all_kpts, total)
 
-    coords = np.full((18, 2), -1.0, dtype=np.float32)
+    coords = np.full((18, 3), -1.0, dtype=np.float32)
 
-    # PAF Grouping
+    # --- STRATEGY A: PAF Grouping (The Gold Standard) ---
     paf_hwc = paf.transpose(1, 2, 0)
     poses, all_res = group_keypoints(all_kpts, paf_hwc)
 
     if poses is not None and len(poses) > 0:
-        # Select best pose (most detected joints)
-        best_idx = max(range(len(poses)), key=lambda p: int(np.sum(poses[p][:18] != -1)))
-        pose = poses[best_idx]
+        # If we have history, pick the pose closest to the previous skeleton
+        if prev_kpts is not None:
+             # Calculate distance between each candidate pose and the previous skeleton
+             best_pose_idx = -1
+             min_dist = float('inf')
+             
+             for p_idx, pose_candidate in enumerate(poses):
+                 # Compare only valid joints
+                 dist = 0
+                 valid_joints = 0
+                 for i in range(18):
+                     if pose_candidate[i] != -1 and prev_kpts[i][2] > 0:
+                         kpt_cand = all_res[int(pose_candidate[i])]
+                         # Convert to real scale for comparison
+                         x_cand = kpt_cand[0] * 8.0 / scale
+                         y_cand = kpt_cand[1] * 8.0 / scale
+                         
+                         dist += np.sqrt((x_cand - prev_kpts[i][0])**2 + (y_cand - prev_kpts[i][1])**2)
+                         valid_joints += 1
+                 
+                 if valid_joints > 0:
+                     avg_dist = dist / valid_joints
+                     if avg_dist < min_dist:
+                         min_dist = avg_dist
+                         best_pose_idx = p_idx
+             
+             # Use the closest pose if we found a match, otherwise fallback to "most parts"
+             if best_pose_idx != -1:
+                 pose = poses[best_pose_idx]
+             else:
+                 pose = poses[max(range(len(poses)), key=lambda p: int(np.sum(poses[p][:18] != -1)))]
+        else:
+            # No history? Pick the one with most parts
+            pose = poses[max(range(len(poses)), key=lambda p: int(np.sum(poses[p][:18] != -1)))]
 
+        # Fill coords
         for i in range(18):
             if pose[i] != -1:
                 kpt = all_res[int(pose[i])]
-                # Project back: (Heatmap_Coord * Stride 8.0) / Scale
-                coords[i] = [float(kpt[0]) * 8.0 / scale, float(kpt[1]) * 8.0 / scale]
+                coords[i] = [kpt[0] * 8.0 / scale, kpt[1] * 8.0 / scale, kpt[2]]
+        
         return coords
 
-    # Fallback: Heatmap Maxima
+    # --- STRATEGY B: ROI Search (Spatial Consistency) ---
+    # Only runs if PAF failed. 
+    # We look for the max ONLY near the previous joint location.
+    
+    heatmap_h, heatmap_w = heatmap[0].shape
+    search_radius = int(50 * scale / 8.0) # e.g., 50px radius scaled down to heatmap size
+    if search_radius < 3: search_radius = 3
+
     for i in range(18):
-        _, conf, _, max_loc = cv2.minMaxLoc(heatmap[i])
-        if conf > 0.1:
-            coords[i] = [float(max_loc[0]) * 8.0 / scale, float(max_loc[1]) * 8.0 / scale]
+        # Do we have a valid previous location for this joint?
+        if prev_kpts is not None and prev_kpts[i][2] > 0.1:
+            # Convert real coords back to heatmap coords
+            prev_x_hm = int(prev_kpts[i][0] * scale / 8.0)
+            prev_y_hm = int(prev_kpts[i][1] * scale / 8.0)
+            
+            # Define ROI (Window)
+            x_min = max(0, prev_x_hm - search_radius)
+            x_max = min(heatmap_w, prev_x_hm + search_radius)
+            y_min = max(0, prev_y_hm - search_radius)
+            y_max = min(heatmap_h, prev_y_hm + search_radius)
+            
+            # Crop heatmap to ROI
+            roi = heatmap[i][y_min:y_max, x_min:x_max]
+            
+            if roi.size > 0:
+                min_val, conf, min_loc, max_loc = cv2.minMaxLoc(roi)
+                
+                # If confident enough inside the window
+                if conf > 0.05:
+                    # Adjust local ROI coords back to global heatmap coords
+                    global_x = x_min + max_loc[0]
+                    global_y = y_min + max_loc[1]
+                    
+                    coords[i] = [global_x * 8.0 / scale, global_y * 8.0 / scale, conf]
+                    continue # Success! Move to next joint.
+
+        # --- STRATEGY C: Global Search (Last Resort) ---
+        # Only if we had no history OR the ROI search found nothing
+        min_val, conf, min_loc, max_loc = cv2.minMaxLoc(heatmap[i])
+        if conf > 0.1: # Higher threshold for global search to avoid noise
+            coords[i] = [max_loc[0] * 8.0 / scale, max_loc[1] * 8.0 / scale, conf]
 
     return coords
 
 def extract_clip_tensors_batched(cap, fps, t_start_sec):
     """
-    Extracts a 30-frame clip using batch pose inference and high-fidelity fusion.
+    Extracts a 30-frame clip with IMPROVED Persistent History Imputation:
+    - temporal carry-forward
+    - velocity prediction
+    - max missing frame reset
+    - jump-distance rejection
     """
+
+    # -------------------------
+    # PARAMETERS (tune if needed)
+    # -------------------------
+    CONF_TH = 0.05
+    MAX_MISSING = 5          # frames before we drop a joint
+    DECAY_COPY = 0.95
+    DECAY_PRED = 0.90
+    MAX_JUMP = 80            # pixels — reject sudden jumps
+
     start_frame = int(round(t_start_sec * fps))
     end_frame   = int(round((t_start_sec + 5.0) * fps))
 
+    # -------------------------
     # 1. Read Frames
+    # -------------------------
     frame_idxs = np.linspace(start_frame, end_frame - 1, 30).astype(int)
     frames = []
+
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-    
-    for i in range(start_frame, end_frame):
+    current_read_idx = start_frame
+
+    for _ in range(end_frame - start_frame):
         ret, frame = cap.read()
-        if not ret: break
-        if i in frame_idxs:
+        if not ret:
+            break
+
+        if current_read_idx in frame_idxs:
             frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if len(frames) == 30: break
 
-    if len(frames) < 30: return None, None
+        current_read_idx += 1
+        if len(frames) == 30:
+            break
 
+    if len(frames) < 30:
+        return None, None
+
+    # -------------------------
     # 2. Batch Pose Inference
+    # -------------------------
     h, w, _ = frames[0].shape
     scale = 256.0 / float(h)
-    batch_inp = [cv2.resize(f, (0,0), fx=scale, fy=scale) for f in frames]
+
+    batch_inp = [cv2.resize(f, (0, 0), fx=scale, fy=scale) for f in frames]
     batch_inp = np.stack(batch_inp).astype(np.float32)
-    batch_inp = (batch_inp - 128.0) / 256.0 # Normalize
+    batch_inp = (batch_inp - 128.0) / 256.0
 
     batch_tensor = torch.from_numpy(batch_inp).permute(0, 3, 1, 2).to(DEVICE)
+
     with torch.no_grad():
         out = net(batch_tensor)
         all_heatmaps = out[-2].cpu().numpy()
         all_pafs = out[-1].cpu().numpy()
 
-    # 3. Patch Extraction & Fusion
+    # -------------------------
+    # 3. Persistent Skeleton State
+    # -------------------------
+    pad = 64
     clip_patches, clip_kpts = [], []
-    pad = 64 # Padding for 128x128 crops
 
+    persistent = np.full((18, 3), -1.0, dtype=np.float32)
+    prev_positions = np.full((18, 2), -1.0, dtype=np.float32)
+    missing_count = np.zeros(18, dtype=np.int32)
+
+    # -------------------------
+    # 4. Frame Loop
+    # -------------------------
     for i in range(30):
-        vsvig_coords = process_maps_to_coords(all_heatmaps[i], all_pafs[i], scale, h, w)
-        vsvig_coords = vsvig_coords[JOINT_INDICES]
+
+        raw_18_kpts = process_maps_to_coords(
+            all_heatmaps[i],
+            all_pafs[i],
+            scale, h, w,
+            prev_kpts=persistent
+        )
+
+        # -------- joint-wise repair --------
+        for k in range(18):
+            x, y, conf = raw_18_kpts[k]
+            px, py, pconf = persistent[k]
+
+            # -------------------------
+            # CASE 1 — Good detection
+            # -------------------------
+            if conf > CONF_TH:
+
+                # distance sanity check
+                if pconf > CONF_TH:
+                    dist = np.hypot(x - px, y - py)
+                    if dist > MAX_JUMP:
+                        # reject jump → treat as missing
+                        conf = -1
+
+                if conf > CONF_TH:
+                    prev_positions[k] = persistent[k][:2]
+                    persistent[k] = raw_18_kpts[k]
+                    missing_count[k] = 0
+                    continue
+
+            # -------------------------
+            # CASE 2 — Missing detection
+            # -------------------------
+            missing_count[k] += 1
+
+            if pconf > CONF_TH and missing_count[k] <= MAX_MISSING:
+
+                # try velocity prediction
+                vx = px - prev_positions[k][0] if prev_positions[k][0] >= 0 else 0
+                vy = py - prev_positions[k][1] if prev_positions[k][1] >= 0 else 0
+
+                pred_x = px + vx
+                pred_y = py + vy
+
+                raw_18_kpts[k] = np.array([
+                    pred_x,
+                    pred_y,
+                    pconf * DECAY_PRED
+                ], dtype=np.float32)
+
+                persistent[k] = raw_18_kpts[k]
+
+            elif pconf > CONF_TH and missing_count[k] <= MAX_MISSING:
+                # fallback to copy if no velocity history
+                raw_18_kpts[k] = persistent[k].copy()
+                raw_18_kpts[k][2] *= DECAY_COPY
+
+            else:
+                # too long missing → reset
+                persistent[k] = np.array([-1, -1, -1], dtype=np.float32)
+
+        # -------------------------
+        # VSViG joint subset
+        # -------------------------
+        vsvig_coords = raw_18_kpts[JOINT_INDICES]
         clip_kpts.append(vsvig_coords)
 
-        # Pad frame
-        p_img = cv2.copyMakeBorder(frames[i], pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+        # -------------------------
+        # Patch extraction
+        # -------------------------
+        p_img = cv2.copyMakeBorder(
+            frames[i], pad, pad, pad, pad,
+            cv2.BORDER_CONSTANT, value=0
+        )
+
         p_batch = np.zeros((15, 32, 32, 3), dtype=np.float32)
 
-        for j, (x, y) in enumerate(vsvig_coords):
-            if x < 0 or y < 0: continue
+        for j, (x, y, conf) in enumerate(vsvig_coords):
+            if x < 0 or y < 0:
+                continue
 
             x_p, y_p = int(round(x + pad)), int(round(y + pad))
-
-            # Extract 128x128 patch
-            crop = p_img[y_p-64:y_p+64, x_p-64:x_p+64, :].astype(np.float32)
+            crop = p_img[y_p-64:y_p+64, x_p-64:x_p+64].astype(np.float32)
 
             if crop.shape == (128, 128, 3):
-                # FUSION + DOWNSAMPLE
                 fused = crop * g_filter_high
-                p_batch[j] = cv2.resize(fused, (32, 32), interpolation=cv2.INTER_CUBIC) / 255.0
+                p_batch[j] = cv2.resize(
+                    fused, (32, 32),
+                    interpolation=cv2.INTER_CUBIC
+                ) / 255.0
 
         clip_patches.append(p_batch)
 
-    # Final shape: (T, N, C, H, W)
     patches = np.array(clip_patches).transpose(0, 1, 4, 2, 3)
     return patches, np.array(clip_kpts)
 

@@ -75,7 +75,7 @@ class IntraPartMR(nn.Module):
             tmp_x_j,_= torch.max(relative[:,:,point,(part-1)*3+1:part*3+1], -1, keepdim=True)
             # Part_x_j[:,:,point,1] = tmp_x_j.squeeze(-1)
             tmp_x[:,:,point,:] = tmp_x_j
-            if point+1 % 3 == 0:
+            if (point+1) % 3 == 0:
                 part = 1+part
         
         x = torch.cat([x, tmp_x],1)
@@ -151,6 +151,9 @@ class Grapher(nn.Module):
         x = x+tmp_x # Residual
         x = self.act(x)
 
+        # 🔴 ADD DROPOUT HERE 🔴
+        x = self.dropout(x)
+
         # Intra-Partition Block
         x = self.fc3(x)
         x = self.IntraPartMR(x)
@@ -158,6 +161,9 @@ class Grapher(nn.Module):
         x = x + tmp_x # Residual
         x = self.act(x)
 
+        # 🔴 ADD DROPOUT HERE 🔴
+        x = self.dropout(x)
+        
         return x.view(B,T,C,P,1)
 
 class Part_3DCNN(nn.Module):
@@ -249,7 +255,7 @@ class STViG(nn.Module):
         else:
             ch4stem = output_channels[0]
         self.stem = Stem(input_dim=3, output_dim=ch4stem) # B T P C
-        self.stem_pe = Stem_pe(input_dim=2, output_dim=ch4stem)
+        self.stem_pe = Stem_pe(input_dim=3, output_dim=ch4stem)
         
         self.in_channels = output_channels[0]
         # Original: self.backbone = []

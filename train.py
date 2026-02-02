@@ -7,6 +7,7 @@ import numpy as np
 import os
 from collections import defaultdict
 
+
 # --- CONFIGURATION ---
 PROCESSED_FOLDER = "processed_data" 
 PATH_TO_DATA_FOLDER = PROCESSED_FOLDER 
@@ -26,61 +27,73 @@ class vsvig_dataset(Dataset):
         self._folder = data_folder
         self._transform = transform
         
-        # Define subfolders for patches and keypoints
         self.patches_dir = os.path.join(data_folder, "patches")
         self.kpts_dir = os.path.join(data_folder, "kpts")
         
-        # Check if folders exist
         if not os.path.exists(self.patches_dir) or not os.path.exists(self.kpts_dir):
             raise FileNotFoundError(f"Ensure 'patches' and 'kpts' folders exist inside {data_folder}")
 
-        # Load Labels
-        with open(label_file, 'rb') as f:
-            self._labels = json.load(f)
+        # 🔴 SMART LOADER: Handles both Dict and List 🔴
+        with open(label_file, 'r') as f:
+            raw_data = json.load(f)
+            
+        if isinstance(raw_data, list):
+            # Case A: It's already a List (Your train_labels.json)
+            print(f"✅ Detected LIST format in {os.path.basename(label_file)}")
+            self._labels = raw_data
+        elif isinstance(raw_data, dict):
+            # Case B: It's a Dictionary (The master labels.json)
+            print(f"✅ Detected DICT format in {os.path.basename(label_file)} (Converting...)")
+            self._labels = [[k, v] for k, v in raw_data.items()]
+        else:
+            raise ValueError("Label file must be a JSON List or Dictionary.")
+            
+        print(f"   Loaded {len(self._labels)} samples.")
 
     def __getitem__(self, idx):
-        # Assuming label structure: [filename_string, label_value]
-        # Example: ["pat01_Sz1_1780", 1]
+        # Access list item
         filename_base = str(self._labels[idx][0])
         target = float(self._labels[idx][1])
         
-        # Construct paths
-        # NOTE: Assuming files end in .pt. If they represent .npy files, change to .npy and use np.load
         patch_path = os.path.join(self.patches_dir, f"{filename_base}.pt")
         kpts_path = os.path.join(self.kpts_dir, f"{filename_base}.pt")
         
-        # Load Data
         try:
             data = torch.load(patch_path, map_location='cpu') # Shape: (30, 15, 3, 32, 32)
             kpts = torch.load(kpts_path, map_location='cpu')  # Shape: (30, 15, 2)
         except FileNotFoundError:
-            raise FileNotFoundError(f"Could not find files for ID: {filename_base} at {patch_path}")
+            raise FileNotFoundError(f"Could not find files for ID: {filename_base}")
         
-        # --- PREVIOUS FIX 1: NORMALIZE KEYPOINTS ---
-        # Ensure kpts are float
+        # -----------------------------------------------------------
+        # [FIX 2] NORMALIZATION & STANDARDIZATION
+        # -----------------------------------------------------------
+        
+        # 1. Ensure float and [0, 1] range
+        # Your preprocessing saves as [0, 1], so we typically don't need to divide.
+        # But just in case any 0-255 crept in:
+        if data.max() > 2.0: 
+            data = data.float() / 255.0
+        else:
+            data = data.float()
+            
+        # 2. Apply Standardization (Mean/Std)
+        # This centers the data around 0, which is critical for the ReLU layers to work well.
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        
+        # Loop over time (30 frames) and joints (15) to apply broadcast
+        # data shape: (30, 15, 3, 32, 32)
+        for t in range(data.shape[0]):
+            for j in range(data.shape[1]):
+                 data[t, j] = (data[t, j] - mean) / std
+
+        # 3. Keypoints Normalization [0, 1]
         kpts = kpts.float()
-          
-        kpts[:, :, 0] = kpts[:, :, 0] / 1920.0
-        kpts[:, :, 1] = kpts[:, :, 1] / 1080.0
-        
-        '''
-        # --- PREVIOUS FIX 2: ADD CONFIDENCE CHANNEL (2 -> 3 CHANNELS) ---
-        # Current shape: (30, 15, 2) -> We need: (30, 15, 3)
-        confidence = torch.ones((30, 15, 1), dtype=kpts.dtype)
-        kpts = torch.cat((kpts, confidence), dim=2)
-        
-        if self._transform: 
-            # Flatten dimensions for transform if needed, then reshape back
-            if len(data.shape) == 5:
-                B_frames, P, C, H, W = data.shape 
-                data = data.view(B_frames*P*C, H, W)
-                data = self._transform(data)
-                data = data.view(B_frames, P, C, H, W)
-         '''    
-        sample = {
-            'data': data,
-            'kpts': kpts 
-        }
+        if kpts.max() > 2.0:
+            kpts[:, :, 0] = kpts[:, :, 0] / 1920.0
+            kpts[:, :, 1] = kpts[:, :, 1] / 1080.0
+            
+        sample = {'data': data, 'kpts': kpts}
         return sample, target
     
     def __len__(self):

@@ -148,7 +148,7 @@ def main():
         
         analyze_keypoints(kpts)
         save_patches_grid(data, current_file, frame_idx=0)
-        save_patches_grid(data, current_file, frame_idx=15)
+        save_patches_grid(data, current_file, frame_idx=29)
 
 if __name__ == '__main__':
     main()
