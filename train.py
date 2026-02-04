@@ -78,14 +78,15 @@ class vsvig_dataset(Dataset):
             
         # 2. Apply Standardization (Mean/Std)
         # This centers the data around 0, which is critical for the ReLU layers to work well.
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        # Create Mean/Std tensors that match the Channel dimension (Dim 2)
+        # Data shape: (30, 15, 3, 32, 32)
+        # We reshape mean/std to (1, 1, 3, 1, 1) to broadcast correctly
         
-        # Loop over time (30 frames) and joints (15) to apply broadcast
-        # data shape: (30, 15, 3, 32, 32)
-        for t in range(data.shape[0]):
-            for j in range(data.shape[1]):
-                 data[t, j] = (data[t, j] - mean) / std
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
+        
+        # PyTorch handles the broadcasting automatically
+        data = (data - mean) / std
 
         # 3. Keypoints Normalization [0, 1]
         kpts = kpts.float()
@@ -114,8 +115,8 @@ def train():
         
         # REMOVED ChunkBatchSampler
         # Standard DataLoader with shuffle=True for training
-        train_loader = DataLoader(dataset_train, batch_size=32, shuffle=True, num_workers=0)
-        val_loader = DataLoader(dataset_val, batch_size=32, shuffle=False, num_workers=0)
+        train_loader = DataLoader(dataset_train, batch_size=32, shuffle=True, num_workers=4)
+        val_loader = DataLoader(dataset_val, batch_size=32, shuffle=False, num_workers=4)
         
         # 2. Setup Model & Hardware
         if m == 'Base':

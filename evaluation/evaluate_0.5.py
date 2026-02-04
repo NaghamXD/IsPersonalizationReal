@@ -25,30 +25,37 @@ class vsvig_dataset(Dataset):
 
     def __getitem__(self, idx):
         file_key = self._keys[idx]
-        label = float(self._labels_dict[file_key])
         
-        # Parse: "pat01_Sz1_100" -> UniqueID: "pat01_Sz1", Frame: 100
+        # Parse: "pat01_Sz1_100.5"
         parts = file_key.split('_')
         unique_id = f"{parts[0]}_{parts[1]}"
-        try: frame_num = int(parts[-1])
-        except: frame_num = 0
+        try: frame_num = float(parts[-1]) # Float for 0.5s stride support
+        except: frame_num = 0.0
         
-        # Robust path handling
         data_path = os.path.join(self._folder, 'patches', f"{file_key}.pt")
         kpts_path = os.path.join(self._folder, 'kpts', f"{file_key}.pt")
         
-        # Fallback for flat directory structure
-        if not os.path.exists(data_path):
-            data_path = os.path.join(self._folder, f"{file_key}.pt")
-            kpts_path = os.path.join(self._folder, f"{file_key}_kpts.pt")
-
         data = torch.load(data_path, map_location='cpu')
         kpts = torch.load(kpts_path, map_location='cpu')
         
-        # --- KEYPOINT NORMALIZATION FIX ---
+        if data.max() > 2.0: 
+            data = data.float() / 255.0
+        else:
+            data = data.float()
+            
+        # 2. Apply Standardization (Mean/Std)
+        
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
+        
+        # PyTorch handles the broadcasting automatically
+        data = (data - mean) / std
+
+        # 3. Keypoints Normalization [0, 1]
         kpts = kpts.float()
-        kpts[:, :, 0] /= 1920.0
-        kpts[:, :, 1] /= 1080.0
+        if kpts.max() > 2.0:
+            kpts[:, :, 0] = kpts[:, :, 0] / 1920.0
+            kpts[:, :, 1] = kpts[:, :, 1] / 1080.0
         
         return data, kpts, label, unique_id, frame_num
 
@@ -57,9 +64,9 @@ class vsvig_dataset(Dataset):
     
 # --- 2. SETTINGS ---
 DT_SENSITIVITY = 0.3
-STRIDE = 1.0
-WINDOW_SIZE = 3
-PAPER_WINDOW = -120 # Seconds (Detections earlier than this are False Alarms)
+STRIDE = 0.5
+WINDOW_SIZE = 6
+PAPER_WINDOW = -120.0
 
 # --- 3. HELPER FUNCTIONS ---
 def get_metadata_from_excel(excel_path):

@@ -1,0 +1,184 @@
+{
+    "config": {
+        "stride": 1.0,
+        "window": 3,
+        "dt": 0.3
+    },
+    "latency_metrics": {
+        "avg_leo": -18.606060606060606,
+        "avg_lco": -33.45454545454545,
+        "sensitivity": 1.0
+    },
+    "fdr_metrics": {
+        "total_false_positives": 5,
+        "total_hours_analyzed": 0.4608333333333333,
+        "fdr_per_hour": 10.8499095840868
+    },
+    "detailed_results": [
+        {
+            "id": "pat01_Sz1",
+            "leo": 5.0,
+            "lco": -6.0
+        },
+        {
+            "id": "pat01_Sz2",
+            "leo": 9.0,
+            "lco": -7.0
+        },
+        {
+            "id": "pat02_Sz1",
+            "leo": 17.0,
+            "lco": -15.0
+        },
+        {
+            "id": "pat02_Sz2",
+            "leo": -245.0,
+            "lco": -294.0
+        },
+        {
+            "id": "pat03_Sz1",
+            "leo": 0.0,
+            "lco": -6.0
+        },
+        {
+            "id": "pat03_Sz2",
+            "leo": 1.0,
+            "lco": -4.0
+        },
+        {
+            "id": "pat04_Sz1",
+            "leo": 5.0,
+            "lco": -11.0
+        },
+        {
+            "id": "pat05_Sz1",
+            "leo": 1.0,
+            "lco": -6.0
+        },
+        {
+            "id": "pat05_Sz2",
+            "leo": 5.0,
+            "lco": -10.0
+        },
+        {
+            "id": "pat05_Sz3",
+            "leo": 3.0,
+            "lco": -9.0
+        },
+        {
+            "id": "pat06_Sz1",
+            "leo": -15.0,
+            "lco": -19.0
+        },
+        {
+            "id": "pat06_Sz2",
+            "leo": -1.0,
+            "lco": -4.0
+        },
+        {
+            "id": "pat06_Sz3",
+            "leo": 1.0,
+            "lco": -1.0
+        },
+        {
+            "id": "pat07_Sz1",
+            "leo": 23.0,
+            "lco": -26.0
+        },
+        {
+            "id": "pat07_Sz2",
+            "leo": 21.0,
+            "lco": -22.0
+        },
+        {
+            "id": "pat08_Sz1",
+            "leo": 18.0,
+            "lco": -12.0
+        },
+        {
+            "id": "pat08_Sz2",
+            "leo": -508.0,
+            "lco": -514.0
+        },
+        {
+            "id": "pat08_Sz3",
+            "leo": 2.0,
+            "lco": -5.0
+        },
+        {
+            "id": "pat09_Sz1",
+            "leo": 2.0,
+            "lco": -6.0
+        },
+        {
+            "id": "pat09_Sz2",
+            "leo": 3.0,
+            "lco": -7.0
+        },
+        {
+            "id": "pat09_Sz3",
+            "leo": 1.0,
+            "lco": -7.0
+        },
+        {
+            "id": "pat10_Sz1",
+            "leo": 3.0,
+            "lco": -14.0
+        },
+        {
+            "id": "pat10_Sz2",
+            "leo": 1.0,
+            "lco": -5.0
+        },
+        {
+            "id": "pat11_Sz1",
+            "leo": -5.0,
+            "lco": -17.0
+        },
+        {
+            "id": "pat11_Sz2",
+            "leo": 7.0,
+            "lco": -11.0
+        },
+        {
+            "id": "pat11_Sz3",
+            "leo": 3.0,
+            "lco": -8.0
+        },
+        {
+            "id": "pat12_Sz1",
+            "leo": 0.0,
+            "lco": -6.0
+        },
+        {
+            "id": "pat12_Sz2",
+            "leo": 0.0,
+            "lco": -3.0
+        },
+        {
+            "id": "pat12_Sz3",
+            "leo": 2.0,
+            "lco": -6.0
+        },
+        {
+            "id": "pat12_Sz4",
+            "leo": 2.0,
+            "lco": -4.0
+        },
+        {
+            "id": "pat13_Sz1",
+            "leo": 1.0,
+            "lco": -5.0
+        },
+        {
+            "id": "pat14_Sz1",
+            "leo": 7.0,
+            "lco": -11.0
+        },
+        {
+            "id": "pat14_Sz2",
+            "leo": 17.0,
+            "lco": -23.0
+        }
+    ]
+}

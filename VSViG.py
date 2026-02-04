@@ -152,7 +152,7 @@ class Grapher(nn.Module):
         x = self.act(x)
 
         # 🔴 ADD DROPOUT HERE 🔴
-        x = self.dropout(x)
+        #x = self.dropout(x)
 
         # Intra-Partition Block
         x = self.fc3(x)
@@ -162,8 +162,8 @@ class Grapher(nn.Module):
         x = self.act(x)
 
         # 🔴 ADD DROPOUT HERE 🔴
-        x = self.dropout(x)
-        
+        #x = self.dropout(x)
+
         return x.view(B,T,C,P,1)
 
 class Part_3DCNN(nn.Module):

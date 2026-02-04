@@ -6,6 +6,7 @@ import torch.nn as nn
 import numpy as np
 import os
 from collections import defaultdict
+import torch.nn.functional as F  # Added for manual RMSE calculation
 
 
 # --- CONFIGURATION ---
@@ -76,14 +77,15 @@ class vsvig_dataset(Dataset):
             
         # 2. Apply Standardization (Mean/Std)
         # This centers the data around 0, which is critical for the ReLU layers to work well.
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        # Create Mean/Std tensors that match the Channel dimension (Dim 2)
+        # Data shape: (30, 15, 3, 32, 32)
+        # We reshape mean/std to (1, 1, 3, 1, 1) to broadcast correctly
         
-        # Loop over time (30 frames) and joints (15) to apply broadcast
-        # data shape: (30, 15, 3, 32, 32)
-        for t in range(data.shape[0]):
-            for j in range(data.shape[1]):
-                 data[t, j] = (data[t, j] - mean) / std
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
+        
+        # PyTorch handles the broadcasting automatically
+        data = (data - mean) / std
 
         # 3. Keypoints Normalization [0, 1]
         kpts = kpts.float()
@@ -119,8 +121,8 @@ def train():
     dataset_val = vsvig_dataset(data_folder=PATH_TO_DATA_FOLDER, label_file=val_label_path)
 
     # Using smaller batch size is often better for generalization in GNNs
-    train_loader = DataLoader(dataset_train, batch_size=16, shuffle=True, num_workers=0)
-    val_loader = DataLoader(dataset_val, batch_size=16, shuffle=False, num_workers=0)
+    train_loader = DataLoader(dataset_train, batch_size=16, shuffle=True, num_workers=8)
+    val_loader = DataLoader(dataset_val, batch_size=16, shuffle=False, num_workers=8)
 
     # 2. Setup Model
     model = VSViG_base() # Using your clean architecture
@@ -215,7 +217,7 @@ def train():
         # 4. Validation & Saving
         if (e+1) % 5 == 0:
             valid_loss = 0.0
-            RMSE_loss = 0.0
+            rmse_accum = 0.0
             model.eval()
             
             with torch.no_grad():
@@ -236,14 +238,12 @@ def train():
                     rmse_accum += torch.sqrt(F.mse_loss(outputs, labels)).item() * 100
             
             avg_val_loss = valid_loss / len(val_loader)
-            avg_rmse = RMSE_loss / len(val_loader)
+            avg_rmse = rmse_accum / len(val_loader)
             
             history['val_loss'].append(avg_val_loss)
             history['val_rmse'].append(avg_rmse)
             
             print(f' +++ Val Loss: {avg_val_loss:.3f} | Val RMSE: {avg_rmse:.3f} +++')
-
-            print(f'   🔍 Val Loss: {avg_val_loss:.4f} | Val RMSE: {avg_rmse:.2f}%')
 
             # Save Best Model based on VALIDATION loss (Crucial!)
             if avg_val_loss < min_valid_loss:
