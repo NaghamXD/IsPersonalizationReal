@@ -11,6 +11,7 @@ processed_data/
 processed_data_bo_conf/
 processed_data_for_evaluation/
 WU-SAHZU-EMU-Video/
+LOPO/
 
 # Ignore Python cache
 __pycache__/

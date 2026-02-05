@@ -13,7 +13,7 @@ METADATA_EXCEL_PATH = "WU-SAHZU-EMU-Video/dataset/Label.xlsx"
 MASTER_LABEL_FILE = os.path.join(BASE_PATH, "processed_data/labels.json")
 PROCESSED_DATA_DIR = os.path.join(BASE_PATH, "processed_data")
 MODEL_PATH = os.path.join(BASE_PATH, "checkpoints_improved/best_model.pth")
-RESULTS_JSON_PATH = "evaluation_report.json"
+RESULTS_JSON_PATH = "evaluation_report_improved.json"
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
 print(f"✅ Using device: {DEVICE}")
@@ -22,6 +22,10 @@ print(f"✅ Using device: {DEVICE}")
 DT_SENSITIVITY = 0.3
 STRIDE = 1.0       # ✅ Kept as you requested
 WINDOW_SIZE = 3    # ✅ Kept as you requested
+
+# Configuration for exclusion
+PRE_ICTAL_BUFFER = 120   # 2 minutes before seizure
+POST_ICTAL_BUFFER = 120  # 2 minutes after seizure
 
 class vsvig_dataset(Dataset):
     def __init__(self, data_folder, label_file):
@@ -111,10 +115,9 @@ def evaluate_model():
     model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
     model.eval()
 
-    # --- PART 1: SEIZURE LATENCY ---
+    # --- PART 1: SEIZURE LATENCY (Kept as is) ---
     print("\n📊 1. Calculating Latency...")
     latency_results = []
-    
     seizure_events = sorted(list(set([k.rsplit('_', 1)[0] for k in all_labels.keys()])))
     
     print(f"{'Seizure ID':<15} | {'LEO':<10} | {'LCO':<10} | {'Status'}")
@@ -172,61 +175,114 @@ def evaluate_model():
         except Exception as e: print(f"Error on {event_id}: {e}")
         if os.path.exists(temp_file): os.remove(temp_file)
 
-    # --- PART 2: FALSE DETECTION RATE (FDR) ---
-    print("\n📊 2. Calculating FDR (Scanning Interictal Data)...")
+    # --- PART 2: FALSE DETECTION RATE (FDR) WITH 2-MIN BUFFER ---
+    print(f"\n📊 2. Calculating FDR (Buffer: {PRE_ICTAL_BUFFER}s pre-seizure)...")
     
-    interictal_clips = [k for k, v in all_labels.items() if float(v) < 0.01]
+    interictal_clips = []
+    skipped_count = 0
+    total_clips_checked = 0
+
+    for k, v in all_labels.items():
+        total_clips_checked += 1
+        
+        # 1. Skip if it is a seizure frame (Label != 0)
+        if float(v) >= 0.01:
+            continue
+            
+        # 2. TIME-BASED BUFFER LOGIC
+        prefix = k.rsplit('_', 1)[0] # e.g. "Pat1_Sz1"
+        
+        # If this file belongs to a known seizure event
+        if prefix in meta:
+            try:
+                # Get the current clip time
+                clip_time = float(k.rsplit('_', 1)[1])
+                
+                # Get the exact seizure start time from Excel metadata
+                seizure_start = meta[prefix]['t_eeg_onset']
+                
+                # Calculate distance from seizure
+                time_from_onset = clip_time - seizure_start
+                
+                # EXCLUSION LOGIC:
+                # We want to ignore the "Danger Zone" surrounding the seizure.
+                # Zone = [Start - 2min]  to  [Start + 2min]
+                # If time_from_onset is -60 (1 min before), we skip.
+                # If time_from_onset is -300 (5 mins before), we keep it.
+                if -PRE_ICTAL_BUFFER < time_from_onset < POST_ICTAL_BUFFER:
+                    skipped_count += 1
+                    continue
+                    
+            except Exception as e:
+                # If metadata is missing/malformed, safe default is to skip to avoid errors
+                continue
+
+        # If we survive the checks, add to analysis list
+        interictal_clips.append(k)
+
+    # Sort clips to ensure we process time sequentially
     interictal_clips.sort(key=lambda x: (x.rsplit('_', 1)[0], float(x.rsplit('_', 1)[1])))
     
     total_hours = (len(interictal_clips) * STRIDE) / 3600.0
-    print(f"   Scanning {len(interictal_clips)} healthy clips...")
-
-    patient_streams = {}
-    for clip in interictal_clips:
-        pid = clip.rsplit('_', 1)[0]
-        if pid not in patient_streams: patient_streams[pid] = []
-        patient_streams[pid].append(clip)
-
-    false_positives = 0
     
-    for pid, clips in patient_streams.items():
-        if len(clips) < WINDOW_SIZE: continue
+    print(f"   ℹ️ Total clips checked: {total_clips_checked}")
+    print(f"   ℹ️ Skipped {skipped_count} clips inside the 2-min buffer zone.")
+    print(f"   ✅ Analyzing {len(interictal_clips)} clips ({total_hours:.2f} hours).")
+
+    if len(interictal_clips) == 0:
+        print("❌ CRITICAL: No background data found! FDR will be 0.")
+        # Create empty report to avoid crash
+        false_positives = 0
+        fdr_per_hour = 0
+    else:
+        # Group by patient for efficient processing
+        patient_streams = {}
+        for clip in interictal_clips:
+            pid = clip.rsplit('_', 1)[0]
+            if pid not in patient_streams: patient_streams[pid] = []
+            patient_streams[pid].append(clip)
+
+        false_positives = 0
         
-        temp_dict = {c: 0 for c in clips}
-        temp_file = "temp_fdr.json"
-        with open(temp_file, 'w') as f: json.dump(temp_dict, f)
-        
-        try:
-            ds = vsvig_dataset(PROCESSED_DATA_DIR, temp_file)
-            dl = DataLoader(ds, batch_size=32, shuffle=False)
+        for pid, clips in patient_streams.items():
+            if len(clips) < WINDOW_SIZE: continue
             
-            probs = []
-            with torch.no_grad():
-                # 🔴 ROBUST LOOP REPEATED
-                for batch in dl:
-                    d = batch[0].to(DEVICE)
-                    k = batch[1].to(DEVICE)
-                    out = model(d, k)
-                    if out.dim() == 0: probs.append(float(out))
-                    else: probs.extend(out.cpu().tolist())
-
-            refractory_counter = 0
-            for i in range(WINDOW_SIZE, len(probs)):
-                if refractory_counter > 0:
-                    refractory_counter -= 1
-                    continue
+            # Create temp JSON for just this patient's background data
+            temp_dict = {c: 0 for c in clips}
+            temp_file = "temp_fdr.json"
+            with open(temp_file, 'w') as f: json.dump(temp_dict, f)
+            
+            try:
+                ds = vsvig_dataset(PROCESSED_DATA_DIR, temp_file)
+                dl = DataLoader(ds, batch_size=32, shuffle=False)
                 
-                if sum(probs[i - WINDOW_SIZE : i]) >= DT_SENSITIVITY:
-                    false_positives += 1
-                    refractory_counter = int(30.0 / STRIDE) 
-                    
-        except Exception as e: print(f"FDR Error {pid}: {e}")
-        if os.path.exists(temp_file): os.remove(temp_file)
+                probs = []
+                with torch.no_grad():
+                    for batch in dl:
+                        d = batch[0].to(DEVICE)
+                        k = batch[1].to(DEVICE)
+                        out = model(d, k)
+                        if out.dim() == 0: probs.append(float(out))
+                        else: probs.extend(out.cpu().tolist())
 
-    fdr_per_hour = false_positives / total_hours if total_hours > 0 else 0
-    print(f"   Total False Alarms: {false_positives}")
-    print(f"   Total Duration: {total_hours:.2f} hrs")
-    print(f"   Measured FDR: {fdr_per_hour:.2f} FP/hr")
+                refractory_counter = 0
+                for i in range(WINDOW_SIZE, len(probs)):
+                    # Refractory logic: Don't count multiple alarms for the same event
+                    if refractory_counter > 0:
+                        refractory_counter -= 1
+                        continue
+                    
+                    # If probability > threshold, it's a False Alarm
+                    if sum(probs[i - WINDOW_SIZE : i]) >= DT_SENSITIVITY:
+                        false_positives += 1
+                        refractory_counter = int(30.0 / STRIDE) # 30s silence after alarm
+                        
+            except Exception as e: print(f"FDR Error {pid}: {e}")
+            if os.path.exists(temp_file): os.remove(temp_file)
+
+        fdr_per_hour = false_positives / total_hours if total_hours > 0 else 0
+        print(f"   Total False Alarms: {false_positives}")
+        print(f"   Measured FDR: {fdr_per_hour:.2f} FP/hr")
 
     # --- 3. SAVE REPORT ---
     report = {
