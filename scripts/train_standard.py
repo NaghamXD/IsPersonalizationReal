@@ -1,103 +1,27 @@
-from VSViG import *
-from torch.utils.data.dataset import Dataset
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.model.vsvig import VSViG_base, VSViG_light
+from src.data.dataset import VSViGDataset
 from torch.utils.data import DataLoader
 import torch, json
 import torch.nn as nn
 import numpy as np
 import os
-from collections import defaultdict
-import torch.nn.functional as F  # Added for manual RMSE calculation
-
+import torch.nn.functional as F
 
 # --- CONFIGURATION ---
-PROCESSED_FOLDER = "processed_data" 
-PATH_TO_DATA_FOLDER = PROCESSED_FOLDER 
+PROCESSED_FOLDER = "processed_data"
+PATH_TO_DATA_FOLDER = PROCESSED_FOLDER
 
 # --- PATH CONFIGS ---
-CHECKPOINT_DIR = "checkpoints_improved"
-if not os.path.exists(CHECKPOINT_DIR): os.makedirs(CHECKPOINT_DIR)
+CHECKPOINT_DIR = "outputs/standard/checkpoints"
+os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 PATH_TO_BEST_MODEL = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 PATH_TO_LAST_CKPT  = os.path.join(CHECKPOINT_DIR, "last_checkpoint.pth")
 PATH_TO_LOG_FILE   = os.path.join(CHECKPOINT_DIR, "training_log.json")
-
-# --- DATASET CLASS (UPDATED) ---
-class vsvig_dataset(Dataset):
-    def __init__(self, data_folder=None, label_file=None, transform=None):
-        super().__init__()
-        
-        self.patches_dir = os.path.join(data_folder, "patches")
-        self.kpts_dir = os.path.join(data_folder, "kpts")
-        
-        if not os.path.exists(self.patches_dir) or not os.path.exists(self.kpts_dir):
-            raise FileNotFoundError(f"Ensure 'patches' and 'kpts' folders exist inside {data_folder}")
-
-        # 🔴 SMART LOADER: Handles both Dict and List 🔴
-        with open(label_file, 'r') as f:
-            raw_data = json.load(f)
-            
-        if isinstance(raw_data, list):
-            # Case A: It's already a List (Your train_labels.json)
-            print(f"✅ Detected LIST format in {os.path.basename(label_file)}")
-            self._labels = raw_data
-        elif isinstance(raw_data, dict):
-            # Case B: It's a Dictionary (The master labels.json)
-            print(f"✅ Detected DICT format in {os.path.basename(label_file)} (Converting...)")
-            self._labels = [[k, v] for k, v in raw_data.items()]
-        else:
-            raise ValueError("Label file must be a JSON List or Dictionary.")
-            
-        print(f"   Loaded {len(self._labels)} samples.")
-
-    def __getitem__(self, idx):
-        # Access list item
-        filename_base = str(self._labels[idx][0])
-        target = float(self._labels[idx][1])
-        
-        patch_path = os.path.join(self.patches_dir, f"{filename_base}.pt")
-        kpts_path = os.path.join(self.kpts_dir, f"{filename_base}.pt")
-        
-        try:
-            data = torch.load(patch_path, map_location='cpu') # Shape: (30, 15, 3, 32, 32)
-            kpts = torch.load(kpts_path, map_location='cpu')  # Shape: (30, 15, 2)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Could not find files for ID: {filename_base}")
-        
-        # -----------------------------------------------------------
-        # [FIX 2] NORMALIZATION & STANDARDIZATION
-        # -----------------------------------------------------------
-        
-        # 1. Ensure float and [0, 1] range
-        # Your preprocessing saves as [0, 1], so we typically don't need to divide.
-        # But just in case any 0-255 crept in:
-        if data.max() > 2.0: 
-            data = data.float() / 255.0
-        else:
-            data = data.float()
-            
-        # 2. Apply Standardization (Mean/Std)
-        # This centers the data around 0, which is critical for the ReLU layers to work well.
-        # Create Mean/Std tensors that match the Channel dimension (Dim 2)
-        # Data shape: (30, 15, 3, 32, 32)
-        # We reshape mean/std to (1, 1, 3, 1, 1) to broadcast correctly
-        
-        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
-        
-        # PyTorch handles the broadcasting automatically
-        data = (data - mean) / std
-
-        # 3. Keypoints Normalization [0, 1]
-        kpts = kpts.float()
-        if kpts.max() > 2.0:
-            kpts[:, :, 0] = kpts[:, :, 0] / 1920.0
-            kpts[:, :, 1] = kpts[:, :, 1] / 1080.0
-            
-        sample = {'data': data, 'kpts': kpts}
-        return sample, target
-    
-    def __len__(self):
-        return len(self._labels)
 
 # --- CUSTOM WEIGHTED LOSS (Optional Alternative) ---
 class WeightedMSELoss(nn.Module):
@@ -117,8 +41,8 @@ def train():
     
     print("🚀 Starting Advanced Training Pipeline...")
     # 1. Setup Data
-    dataset_train = vsvig_dataset(data_folder=PATH_TO_DATA_FOLDER, label_file=train_label_path)
-    dataset_val = vsvig_dataset(data_folder=PATH_TO_DATA_FOLDER, label_file=val_label_path)
+    dataset_train = VSViGDataset(data_folder=PATH_TO_DATA_FOLDER, label_file=train_label_path)
+    dataset_val   = VSViGDataset(data_folder=PATH_TO_DATA_FOLDER, label_file=val_label_path)
 
     # Using smaller batch size is often better for generalization in GNNs
     train_loader = DataLoader(dataset_train, batch_size=16, shuffle=True, num_workers=8)

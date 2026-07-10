@@ -1,5 +1,8 @@
-import os
 import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import os
 import json
 import math
 import random
@@ -69,11 +72,11 @@ print(df.head())
 
 # --- 4. LOAD POSE MODEL ---
 try:
-    from models.with_mobilenet import PoseEstimationWithMobileNet
-    from modules.keypoints import extract_keypoints, group_keypoints
-    from modules.load_state import load_state
-except ImportError:
-    print("❌ Error: Could not import pose model modules. Ensure 'models' and 'modules' folders are in PROJECT_ROOT.")
+    from src.pose.models.with_mobilenet import PoseEstimationWithMobileNet
+    from src.pose.modules.keypoints import extract_keypoints, group_keypoints
+    from src.pose.modules.load_state import load_state
+except ImportError as e:
+    print(f"❌ Error: Could not import pose model modules: {e}")
     sys.exit(1)
 
 net = PoseEstimationWithMobileNet().to(DEVICE).eval()

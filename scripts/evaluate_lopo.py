@@ -1,17 +1,22 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import torch
 import numpy as np
 import pandas as pd
 import json
 import os
 import re
-from torch.utils.data import Dataset, DataLoader
-from VSViG import VSViG_base
+from torch.utils.data import DataLoader
+from src.model.vsvig import VSViG_base
+from src.data.dataset import VSViGDataset
 
 # --- CONFIGURATION ---
-DATA_FOLDER = 'processed_data'
-FOLDS_FOLDER = os.path.join(DATA_FOLDER, 'folds')
-CHECKPOINT_ROOT = 'checkpoints'
-EXCEL_FILE = 'WU-SAHZU-EMU-Video/dataset/Label.xlsx' 
+DATA_FOLDER     = 'processed_data'
+FOLDS_FOLDER    = os.path.join(DATA_FOLDER, 'folds')
+CHECKPOINT_ROOT = 'outputs/lopo/checkpoints'
+EXCEL_FILE      = 'WU-SAHZU-EMU-Video/dataset/Label.xlsx' 
 
 # Paper Parameters
 FPS = 25.0
@@ -45,36 +50,6 @@ def load_ground_truth(file_path):
             'clinical': time_str_to_seconds(row['Clinical Onset'])
         }
     return gt_map
-
-class vsvig_dataset(Dataset):
-    def __init__(self, data_folder, label_list):
-        self._labels = label_list # List of [filename, label]
-        self._folder = data_folder
-
-    def __getitem__(self, idx):
-        item = self._labels[idx]
-        file_key = item[0]
-        label = float(item[1])
-        
-        parts = file_key.split('_')
-        unique_id = f"{parts[0]}_{parts[1]}"
-        try: frame_num = int(parts[-1])
-        except: frame_num = 0
-        
-        # Path Logic
-        data_path = os.path.join(self._folder, 'patches', f"{file_key}.pt")
-        kpts_path = os.path.join(self._folder, 'kpts', f"{file_key}.pt")
-        if not os.path.exists(data_path):
-            data_path = os.path.join(self._folder, f"{file_key}.pt")
-            kpts_path = os.path.join(self._folder, f"{file_key}_kpts.pt")
-            
-        data = torch.load(data_path, map_location='cpu')
-        kpts = torch.load(kpts_path, map_location='cpu').float()
-        kpts[:, :, 0] /= 1920.0
-        kpts[:, :, 1] /= 1080.0
-        return data, kpts, label, unique_id, frame_num
-
-    def __len__(self): return len(self._labels)
 
 def calculate_accumulative_decision(frames, scores, fps, tau, threshold):
     if not frames: return False, None, 0.0
@@ -150,7 +125,7 @@ def main():
         with open(val_path, 'r') as f:
             val_labels = json.load(f)
             
-        dataset = vsvig_dataset(DATA_FOLDER, val_labels)
+        dataset = VSViGDataset(DATA_FOLDER, val_path, eval_mode=True)
         loader = DataLoader(dataset, batch_size=32, shuffle=False)
         
         # 4. Run Inference

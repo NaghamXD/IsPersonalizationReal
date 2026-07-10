@@ -1,19 +1,23 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import json
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 import numpy as np
 import pandas as pd
 import os
 import matplotlib.pyplot as plt
-from VSViG import VSViG_base
+from src.model.vsvig import VSViG_base
+from src.data.dataset import VSViGDataset
 
 # --- 1. PATH CONFIGURATION ---
-BASE_PATH = "." 
 METADATA_EXCEL_PATH = "WU-SAHZU-EMU-Video/dataset/Label.xlsx"
-MASTER_LABEL_FILE = os.path.join(BASE_PATH, "processed_data/labels.json")
-PROCESSED_DATA_DIR = os.path.join(BASE_PATH, "processed_data")
-MODEL_PATH = os.path.join(BASE_PATH, "checkpoints_improved/best_model.pth")
-RESULTS_JSON_PATH = "evaluation_report_improved.json"
+MASTER_LABEL_FILE   = "processed_data/labels.json"
+PROCESSED_DATA_DIR  = "processed_data"
+MODEL_PATH          = "outputs/standard/checkpoints/best_model.pth"
+RESULTS_JSON_PATH   = "outputs/standard/evaluation_report.json"
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
 print(f"✅ Using device: {DEVICE}")

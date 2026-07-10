@@ -21,3 +21,16 @@ __pycache__/
 
 # Ignore documentation files
 docs/
+# Generated outputs (checkpoints, logs, reports)
+outputs/**/*.pth
+outputs/**/*.json
+outputs/**/*.csv
+outputs/**/*.png
+
+# Processed data tensors
+processed_data/patches/
+processed_data/kpts/
+
+# Leftover temp files from evaluation
+temp_eval.json
+temp_fdr.json
