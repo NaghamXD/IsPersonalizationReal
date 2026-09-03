@@ -1,0 +1,2813 @@
+
+--- PAGE 1 ---
+Hypernetwork-Driven Low-Rank Adaptation Across
+Attention Heads
+Nghiem T. Diep⋄,♢,⋆ Dung Le†,⋆ Tuan Truong‡,⋆
+Tan Dinh◦ Huy Nguyen† Nhat Ho†
+†The University of Texas at Austin
+⋄University of Science, VNU-HCM, Ho Chi Minh City, Vietnam
+♢ Vietnam National University, Ho Chi Minh City, Vietnam
+‡ Independent Researcher
+◦Trivita AI
+February 3, 2026
+Abstract
+Parameter-efficient fine-tuning (PEFT) has emerged as a powerful paradigm for adapting
+large-scale pre-trained models to downstream tasks with minimal additional parameters. Among
+PEFT methods, Low-Rank Adaptation (LoRA) stands out for its effectiveness by inserting
+trainable low-rank matrices into weight updates to enable efficient adaptation. However, when
+applied to multi-head self-attention, existing LoRA-based methods typically fine-tune each
+attention head independently, overlooking potential interactions and shared structure among
+heads. Toaddressthislimitation,weproposeHypernetwork-DrivenLow-rankAdaptation(HyRA)
+that employs a hypernetwork to generate joint low-rank matrices for all attention heads within a
+layer. The shared generator promotes cross-head information sharing, helping low-rank modules
+avoid the redundant feature learning seen in traditional LoRA methods. Theoretically, our
+method achieves significantly better sample efficiency compared to standard LoRA. Empirically,
+we evaluate HyRA on a comprehensive suite of language and vision benchmarks. Our approach
+consistently outperforms existing parameter-efficient fine-tuning (PEFT) baselines across a wide
+range of tasks. Notably, in low-data regimes, HyRA achieves substantial improvements over
+LoRA, underscoring its practical sample efficiency and effectiveness in data-scarce scenarios.
+1 Introduction
+Fine-tuning large pre-trained models has become the de facto approach for adapting foundation
+models to downstream tasks. However, the sheer size of modern models makes full fine-tuning
+computationally expensive and storage-intensive, as it requires updating and storing billions of
+parameters for each task. To address this challenge, parameter-efficient fine-tuning (PEFT) methods
+have emerged as a compelling alternative. Instead of updating all parameters, PEFT techniques
+introduce a small number of additional task-specific parameters while keeping most of the pre-trained
+weights frozen. This drastically reduces the computational and memory cost of fine-tuning while
+retaining high task performance. Representative PEFT methods include adapter-tuning [13], prefix-
+tuning [26], and prompt-based approaches such as P-Tuning v2 [29] and Compacter [20]. Together,
+these methods have been widely adopted across domains such as natural language processing [13]
+and computer vision [18], enabling practical adaptation of large-scale models in resource-constrained
+settings.
+⋆ Equal contribution.
+1
+6202
+naJ
+13
+]GL.sc[
+2v59240.0152:viXra
+--- PAGE 2 ---
+Scale Dot-product Attention
+🔥
+🔥
+❄
+🔥
+❄ ❄ 🔥
+🔥: Trainable
+Input Embedding ❄: Frozen
+Figure 1: Illustration of HyRA in Multi-head Self-attention.
+Among PEFT approaches, Low-rank Adaptation (LoRA) [14] has gained particular prominence.
+LoRA assumes that weight updates lie in a low-rank subspace during fine-tuning, and thus ap-
+proximates these updates by decomposing them into the product of two low-rank matrices. By
+injecting these low-rank modules into pre-trained layers (e.g., attention or feedforward layers), LoRA
+enables models to efficiently capture task-specific information while introducing only a negligible
+fraction of new parameters. Its efficiency and strong empirical performance have established LoRA
+as a standard baseline for PEFT in both research and practical deployment. In natural language
+processing, it is used for domain adaptation, instruction tuning, summarization, and generation tasks
+[32]. Recent extensions, such as MTLoRA, have enhanced its applications in multi-task learning and
+adaptive rank allocation for more efficient transfer learning in foundation models [1]. Furthermore,
+LoRA-based frameworks are being applied in federated learning, speech synthesis, and reinforcement
+learning scenarios to enable scalable model customization in distributed or resource-constrained
+environments [53].
+While LoRA has emerged as one of the most widely adopted PEFT methods due to its simplicity
+and efficiency, it has several limitations in the multi-head self-attention setting. First, LoRA learns
+independent low-rank adapters for each attention head and projection, without any mechanism for
+coordination or parameter sharing. This can lead to redundancy across heads, as prior work has
+shown that many attention heads capture overlapping or similar functions [49, 33]. Second, the lack
+of shared structure implies that each head must rely solely on its own gradient signals, which can
+reduce sample efficiency in low-data fine-tuning scenarios. In this work, we answer the following
+research question:
+(Q)Canwemovebeyondfullyindependentadaptersandachieveamethodthatisbothparameter-
+efficient and capable of meaningful information sharing across heads?
+2
+--- PAGE 3 ---
+Toaddressthisquestion,wefirstgeneralizepriorworksthatinvestigatethetheoreticalconnections
+between Mixture of Experts and single-head attention [24, 45] to the setting of multi-head self-
+attention. We show that it can naturally be reinterpreted as a Hierarchical Mixture-of-Experts
+(HMoE). Within this framework, applying LoRA to multi-head self-attention corresponds to refining
+both the experts and their scoring functions via low-rank matrices. Building on this insight of the
+connections between MHA and HMoE, we propose Hyper-shared Low-Rank Adaptation (HyRA),
+a novel method that explicitly promotes information sharing across attention heads. Instead of
+directly and independently learning separate low-rank adapters for each head, HyRA employs a
+joint hypernetwork to generate these adapters. By implementing shared information among the
+attention heads, HyRA encourages the experts in the aforementioned HMoE-MHA framework to
+complement each other by exchanging information, either on the same branch, or across different
+branches. Moreover, the shared hypernetwork introduces structured coupling: heads are no longer
+fully independent but instead benefit from common parameterization, while still retaining flexibility
+through specialized transformations. This design acts as a form of regularization, mitigating
+redundancy across heads and enabling more coherent and data-efficient adaptation. Our theoretical
+analysisdemonstratesthateliminatingsuchredundancyimproves sample efficiency,andourempirical
+results corroborate this finding across diverse domains in vision and language tasks where HyRA
+consistently outperforms several PEFT baselines, including LoRA.
+To evaluate HyRA, we conduct both theoretical and experimental studies. Theoretically, HyRA
+enhancesthesampleefficiencyforthelow-rankmatricesfromanexponential ratetoapolynomial rate.
+Empirically, we benchmark across vision and language tasks, where HyRA consistently outperforms
+strong PEFT baselines, including LoRA.
+Contributions. Our main contributions are summarized as follows:
+• We establish a theoretical link between applying LoRA to multi-head self-attention and
+HMoE. Building on this insight, we propose HyRA, a hypernetwork-based PEFT method
+that encourages information sharing across attention heads.
+• We theoretically demonstrate that HyRA’s parameter-sharing mechanism improves sample
+efficiency from an exponential to a polynomial rate.
+• We empirically show that HyRA substantially improves sample efficiency and achieves
+superior performance across diverse tasks, while remaining parameter-efficient compared
+to prior PEFT methods.
+2 Background
+Notation. For two positive sequences (a ) and (b ) , if there exists a constant C > 0 such
+n n≥1 n n≥1
+that a ≤ Cb for all n, we denote a = O(b ) or a ≲ b . We say that a = O (b ) if their quotient
+n n n n n n n P n
+a
+n
+/b
+n
+is bounded in probability, while the notation a
+n
+= O(cid:101)P (b
+n
+) stands for a
+n
+= O
+P
+(b
+n
+logc(b
+n
+)),
+for some c > 0. We denote Euclidean norm of u by ∥u∥, here |S| represents the cardinality of a
+set S. For any positive integer n ∈ N, we denote [n] = {1,2,...,n}. We write uα = uα1uα2···uα d,
+1 2 d
+|α| = α +α +···+α , and α! = α !α !···α ! for a multi-index α = (α ,α ,...,α ) ∈ Nd. Finally,
+1 2 d 1 2 d 1 2 d
+given a vector u ∈ Rd, both notations u = (u(1),u(2),...,u(d)) and u = (u ,u ,...,u ) are employed
+1 2 d
+interchangeably.
+3
+--- PAGE 4 ---
+Multi-head Self-attention (MHA). The Transformer architecture [48, 7] is built upon the
+MHA mechanism, which enables the model to capture dependencies across different positions of
+a sequence in parallel. In particular, let X = [x ,··· ,x ]T ∈ RN×d denote an input sequence of
+1 N
+embeddings, where N is the sequence length and d is the embedding dimension. Then, an MHA
+layer computes its output as
+MHA(X ,X ,X ) = Concat(h ,··· ,h )W (1)
+Q K V 1 H O
+where H is the number of attention heads, and each head h , for i ∈ {1,2,...,H}, is defined as
+i
+(cid:32) (cid:33)
+XW W⊤ X⊤
+h = Attention(XW ,XW ,XW ) = softmax Q √ ,i K,i XW . (2)
+i Q,i K,i V,i V,i
+d
+k
+Above, the MHA layer projects the input sequence X into queries X = (XW ,··· ,XW ),
+Q Q,1 Q,H
+keys X = (XW ,··· ,XW ), and values X = (XW ,··· ,XW ) where W ,W ∈
+K K,1 K,H V V,1 V,H Q,i K,i
+Rd×d k , W V,i ∈ Rd×dv are projection matrices of the ith head and W O ∈ RHdv×d is the output
+projection. The dimensions are typically chosen such that d = d = d.
+k v H
+Multi-head Low-rank Adaptation (MH-LoRA) Fine-tuning a large pre-trained transformer
+model for a downstream task is computationally expensive as it requires updating a massive number
+ofparameters. LoRA[14]addressesthisissuebyupdatingthepre-trainedweightswiththeproductof
+two low-rank matrices. These ideas come from the observation that weight updates typically lie in a
+low-dimensional subspace, that is, they have low "intrinsic rank" during fine-tuning. Mathematically,
+given a pre-trained weight matrix W ∈ Rm×n, LoRA parameterizes the weight update ∆W as
+0
+the product of two low-rank matrices, that is, ∆W = BA where B ∈ Rm×r, A ∈ Rr×n and
+r ≪ min(m,n). For an input sequence X, the corresponding output is
+y = W X +BAX.
+(cid:98) 0
+During training, only matrices A and B are updated while the pre-trained weights W remain
+0
+frozen. In practice, LoRA is applied to fine-tune projection matrices in the attention layers and
+we refer to it as Multi-head LoRA. Denote A = [A ,A ] and B = [B ,B ], then the output of
+Q V Q V
+multi-head LoRA is given by
+f (X;A,B) = Concat(h˜ ,··· ,h˜ )W ,
+MH−LoRA 1 H O
+where for each head i ∈ {1,2,...,H},
+h˜ = Attention(XW +XB A ,XW ,XW +XB A ).
+i Q,i Q,i Q,i K,i V,i V,i V,i
+Here, A
+Q,i
+∈ Rr×d k,B
+Q,i
+∈ Rd×r,A
+V,i
+∈ Rr×dv , andB
+V,i
+∈ Rd×r arethetrainablelow-rankmatrices
+for the ith head, for i ∈ {1,2,...,H}.
+(Hierarchical) Mixture of Experts (HMoE)MoEframework[17]isamodelthatdecomposes
+alearningtaskintoseveralsub-models, eachspecializinginaparticularinputregionorrepresentation
+pattern. Formally, an MoE model consists of N expert functions f
+i
+: Rd → Rdv for i ∈ [N] and a
+gating function G : Rd → RN that dynamically assigns input-dependent weights to the experts. The
+model output is given by y = (cid:80)N G(X) ·f (X), where G(X) = softmax({s (X)}N ), and each
+(cid:98) i=1 i i i i=1
+s (X) is a similarity score between the input and the ith expert.
+i
+4
+--- PAGE 5 ---
+HMoE [19] extends the standard MoE by organizing experts in a tree-structured hierarchy.
+Instead of a single gating function, the HMoE model employs multiple gating nodes arranged in
+levels. For example, let us consider a 2-layer HMoE model. The first level employs gating functions
+G (X), while the second level employs conditional gating function G (X) associated with experts
+i j|i
+f (X). The overall prediction of the HMoE model is given by
+j|i
+(cid:88) (cid:88)
+y = G (X) G (X) f (X).
+(cid:98) 1 i 2 j|i j|i
+i j
+3 Theoretical Developments
+Inthissection,wefirstestablisharelationbetweenmulti-headLoRAandHMoEmodelsinSection3.1.
+From the HMoE perspective, we proceed to analyze the sample complexity of estimating low-rank
+matrices in the multi-head LoRA without and with the shared structure across attention heads in
+Sections 3.2 and 3.3, respectively. Our goal is to show that employing the shared structure yields a
+significant gain in the sample efficiency of estimating low-rank matrices.
+3.1 Multi-head LoRA meets Hierarchical Mixture of Experts
+In the sequel, we aim to show that multi-head LoRA can be interpreted as an HMoE model.
+Now, let x˜ = Vec(X) = (x⊤,...,x⊤)⊤ ∈ RNd denote the vectorization of X. Denote W =
+1 N O
+((W )⊤,(W )⊤,...,(W )⊤)⊤, then from the definition of multi-head self-attention matrix in
+O,1 O,2 O,H
+Eq. (2), we have
+(cid:88)
+H
+(cid:88)
+H (cid:18)
+XW Q,h (W K,h
+)⊤X⊤(cid:19)
+MHA(X ,X ,X ) = h W = softmax √ XW W .
+Q K V h O,h V,h O,h
+d
+v
+h=1 h=1
+Let M
+h
+:= W Q,h√ (W
+dv
+V,h )⊤, and J
+i
+:= e⊤
+i
+⊗I
+d
+, here ⊗ stands for Kronecker product
+J = e⊤⊗I = (cid:2) 0 ··· 0 I 0 ··· 0 (cid:3) ∈ Rd×Nd,
+i i d d×d d×d d d×d d×d
+then, J can extract the ith row of a matrix J x˜ = x . Let Bh = J⊤M J , and Eh = J⊤W ,
+i i i ij i h j j j V,h
+then the (i,j)-entry can be expressed as
+[XM X⊤] = x˜ M x˜ = x˜ M x˜ = x˜⊤J⊤M J x˜ = x˜⊤Bhx˜.
+h i,j i h j i h j i h j ij
+As a result, the value at the ith row is given by
+[MHA(X ,X ,X )] = (cid:88)
+H
+(cid:88)
+N exp(x˜⊤B
+i
+h
+j
+x˜)
+·x˜⊤EhW .
+Q K V i (cid:80)N exp(x˜⊤Bhx˜) j O,h
+h=1j=1 l=1 il
+Denote sh : RNd → R be the score functions and fh : RNd → Rdv be the expert functions
+i,j j
+x⊤W (W )⊤x
+sh (x˜) = x˜⊤Bhx˜ = i Q,k √ K,k i , fh(x˜) = x˜⊤Eh.
+i,j ij j j
+d
+v
+5
+--- PAGE 6 ---
+Then, the output of the ith row in the MHA can be formulated as a HMoE:
+H N
+[MHA(X ,X ,X )] = (cid:88)(cid:88) exp(s ij (x˜)) fh(x˜)W .
+Q K V i (cid:80)N
+exp(s (x˜))
+j O,h
+h=1j=1 k=1 ik
+Applying LoRA allows the experts and the score function to be refined by the low-rank updates:
+f˜h(x˜) = x˜⊤J⊤(W +B A ), (3)
+j j V,h V,h V,h
+x˜⊤P⊤(W +B A )(W )⊤P x˜ x⊤(W +B A )(W )⊤x
+s˜h (x) = i Q,h √ Q,h Q,h K,h i = i Q,h Q √ ,h Q,h K,h i , (4)
+i,j
+d d
+v v
+where h ∈ [H] and j ∈ [N]. In this case, the ith row of multi-head LoRA can be written as
+H N
+[f (X,A,B)] = (cid:88)(cid:88) exp(s˜ ij (x)) f˜h(x˜)W .
+MH−LoRA i (cid:80)N
+exp(s˜ (x))
+j O,h
+h=1j=1 k=1 ik
+This equation formalizes the relationship between the multi-head LoRA framework and the HMoE
+model, a connection that plays a central role in our subsequent theoretical analysis.
+3.2 Without Shared Structure
+From the HMoE perspective, we will determine the sample complexity of estimating low-rank
+matrices in multi-head LoRA without the shared structure across attention heads in this section.
+For that purpose, let us present a regression framework that has been adopted by several MoE-based
+PEFT works for studying the asymptotic properties of their models, including prefix tuning [24] and
+LLaMA-adapter [5].
+Problem setup. Let (X ,Y ),(X ,Y ),...,(X ,Y ) ∈ Rd¯ ×Rd¯ be i.i.d. samples of size n
+1 1 2 2 n n
+generated from the following regression model:
+Y = g (X )+ε , i = 1,2,...,n, (5)
+i G∗ i i
+whereweassumethattheinputsX ,X ,...,X arei.i.d. samplesfromsomeprobabilitydistribution
+1 2 n
+µ with bounded support X. Meanwhile, ε ,ε ,...,ε are independent Gaussian noise variables such
+1 2 n
+that E[ε |X ] = 0 and Var[ε |X ] = σ2I , for all i ∈ [n]. Meanwhile, the HMoE-based regression
+i i i i d¯
+function g consists of H expert groups, each of which has L experts:
+G∗
+H L exp(X⊤(P0 +B∗ A∗ )P0 X +c∗)
+g (X) := (cid:88) π∗ (cid:88) Q,h Q,h,j Q,h,j K,h j ·(P0 +B∗ A∗ )X, (6)
+G∗ h Dh (X) V,h V,h,j V,h,j
+h=1 j=1 g,∗
+where we denote Dh (X) := (cid:80)L exp(X⊤(P0 + B∗ A∗ )P0 X + c∗), while G :=
+g,∗ j′=1 Q,h Q,h,j′ Q,h,j′ K,h j′ ∗
+(cid:80)H π∗(cid:80)L exp(c∗)δ represents a mixing measure, that is, a combi-
+h=1 h j′=1 j′ (B Q ∗ ,h,j′ ,A∗ Q,h,j′ ,B V ∗ ,h,j′ ,A∗ V,h,j′ )
+nation of Dirac measures δ, associated with unknown parameters
+(π∗,c∗,B∗ ,A∗ ,B∗ ,A∗ )
+h j′ Q,h,j′ Q,h,j′ V,h,j′ V,h,j′ j′∈[L],h∈[H]
+6
+--- PAGE 7 ---
+in the compact parameter space Θ(cid:98) ⊂ [0,1]×R×Rd¯×r ×Rr×d¯ ×Rd¯×r ×Rr×d¯. In addition, the
+matrices P0 ∈ Rd¯×d¯, P0 ∈ Rd¯×d¯, and P0 ∈ Rd×d¯are frozen so as to align with the formulations
+Q,h K,h V,h
+in Eq. (3) and Eq. (4).
+Least squares estimator. We can estimate low-rank matrices (B∗ ,A∗ ,B∗ ,A∗ )
+Q,h,j′ Q,h,j′ V,h,j′ V,h,j′
+through estimating the ground-truth mixing measure G . To this end, we employ the least-squares
+∗
+method [47], which yields the following estimator:
+n
+(cid:88)
+G(cid:98)n := arg min (Y
+i
+−g
+G
+(X))2,
+G∈G H,L′(Θ(cid:98))
+i=1
+where we have
+H ℓ
+(cid:88) (cid:88)
+G
+H,L′
+(Θ(cid:98)) = {G = π
+h
+exp(c
+j′
+)δ
+(B Q,h,j′,A Q,h,j′,B V,h,j′,A V,h,j′)
+,
+h=1 j′=1
+1 ≤ ℓ ≤ L′,(π
+h
+,c
+j′
+,B
+Q,h,j′
+,A
+Q,h,j′
+,B
+V,h,j′
+,A
+V,h,j′
+) ∈ Θ(cid:98)}
+denotes the set of all mixing measures whose expert group has at most L′ experts. As the true
+number of experts L is usually unknown in practice, it is natural to fit each expert group by L′
+experts, where L′ is sufficiently large such that L′ > L.
+Voronoi loss. Consider a mixing measure G ∈ G
+H,L′
+(Θ(cid:98)). For h ∈ [H], denote τ(h) ∈ [H] be
+the value such that |π − π∗| ≤ |π − π∗ | for each h′ ∈ [H]. To quantify the discrepancy
+τ(h) h τ(h) h′
+between two mixing measures, we consider a loss function built upon the concepts of Voronoi
+cells {W ≡ W (G) : j ∈ [L′],h ∈ [H]} generated by the atoms of G [31]: W = {i ∈ [L′] :
+j|h j|h ∗ j|h
+∥H −H∗ ∥ ≤ ∥H −H∗ ∥,∀l ≠ j}, where we denote H := (B ,A ,B ,A ). Then, the
+τ(h),i h,j τ(h),i h,l Q Q V V
+Voronoi loss of interest is defined as
+(cid:12) (cid:12)
+H H L (cid:12) (cid:12)
+D 1,r (G,G ∗ ) := (cid:88) |π τ(h) −π h ∗|+ (cid:88) π τ(h) (cid:88)(cid:12) (cid:12) (cid:88) exp(c i )−exp(c∗ h ) (cid:12) (cid:12)
+(cid:12) (cid:12)
+h=1 h=1 l=1(cid:12)i∈W (cid:12)
+l|h
+H L
+(cid:88) (cid:88) (cid:88)
++ π exp(c )(∥∆B ∥r +∥∆A ∥r +∥∆B ∥r +∥∆A ∥r) (7)
+τ(h) i Qh,il Qh,il Vh,il Vh,il
+h=1 l=1i∈W
+l|h
+where ∆B := B −B∗ , and ∆A , ∆B , ∆A are defined similarly. With
+Qh,il Q,τ(h),i Q,h,l Qh,il Vh,il Vh,il
+these components in place, we are now prepared to analyze the sample complexity of estimating
+low-rank matrices in multi-head LoRA under the non-shared setting.
+Theorem 1. Under the non-shared structure setting in Eq.(6), the following minimax lower bound
+of estimating G satisfies for any r ≥ 1:
+∗
+sup E
+gG
+[D
+1,r
+(G(cid:98)n ,G)] ≳ n−1/2, (8)
+G∈G H,L′(Θ(cid:98))\GH,L−1(Θ(cid:98))
+where E stands for the expectation taken with respect to the product measure gn.
+gG G
+7
+--- PAGE 8 ---
+The proof of Theorem 1 is in Appendix B.1. The result of Theorem 1 implies that the rates for
+estimating low-rank matrices B∗ ,A∗ ,B∗ ,A∗ are slower than any polynomial rates
+Q,h,j′ Q,h,j′ V,h,j′ V,h,j′
+of order O (n−1/2r), for r ≥ 1. Therefore, these rates may be as slow as O (log−τ(n)) for some
+P P
+constant τ > 0 (according to the inequality log(n) < n).
+Sample complexity of estimating low-rank matrices. Consequently, we may need ex-
+ponentially data points of the order O(exp(ϵ−1/τ)) to achieve estimators of the low-rank ma-
+trices B∗ ,A∗ ,B∗ ,A∗ with a given error ϵ > 0. Thus, the sample complexity of
+Q,h,j′ Q,h,j′ V,h,j′ V,h,j′
+estimating low-rank matrices in multi-head LoRA without the shared structure across attention
+heads is suboptimal. This issue occurs due to the separate structures of the low-rank matrices,
+which yields a negative interaction among low-rank matrices expressed through the partial dif-
+ferential equation (PDE) ∂2F = ∂2F = 0, where we define F(X,A,B) :=
+∂B(u1v1)∂B(u2v2) ∂A(u1v1)∂A(u2v2)
+V V V V
+exp(X⊤(P +B A )P X)(P +B A )X. As shown in a previous work on MoE theories [36],
+Q Q Q K V V V
+this PDE-based interaction decelerates the convergence rate of parameter estimation. The simple
+linear form of experts in Eq. (6) also accounts for the slow parameter estimation rates, which has
+been justified in [36].
+3.3 With Shared Structure
+Shared structure across attention heads. To address the issue of suboptimal sample complexity
+of estimating low-rank matrices in the non-shared setting, we impose a shared structure across
+attention heads in multi-head LoRA. In particular, we reformulate the low-rank matrices as
+A = σ (W A ), A = σ (W A )
+Q,h,j 1 Q,A,j j V,h,j 1 V,A,j j
+B = σ (W B ), B = σ (W B ),
+Q,h,j 2 Q,B,j h,j V,h,j 2 V,B,j h,j
+for all j ∈ [N] and h ∈ [H], where σ and σ are some activation functions, while W , W ,
+1 2 Q,A,j V,A,j
+W , and W are weight matrices. Above, A and A share the matrix A , while
+Q,B,j V,B,j Q,h,j V,h,j j
+B and B share the matrix B . Given this shared structure, it can be checked that the
+Q,h,j V,h,j h,j
+PDE-based interaction among low-rank matrices at the end of Section 3.2 no longer occurs. For
+simplicity, we will set W = W = W and W = W = W with a note that the
+Q,A,j V,A,j 1,j Q,B,j V,B,j 2,j
+original shared setting can be analyzed in a similar fashion. For the sake of theory, we assume that
+the activation functions σ and σ satisfy conditions specified in Appendix B.2.
+1 2
+Problem setup. Inthissetting, westillassumethat(X ,Y ),(X ,Y ),...,(X ,Y ) ∈ Rd¯ ×Rd¯
+1 1 2 2 n n
+are i.i.d. samples drawn from a regression framework but with the following regression function:
+H L exp(X⊤(P0 +σ (W∗ B∗ )σ (W∗ A∗)P0 X +c∗)
+g (X) := (cid:88) π∗ (cid:88) Q,h 2 2,j h,j 1 1,j j K,h j
+G(cid:101)∗ h Dh (X)
+h=1 j=1 g,∗
+·(P0 +σ (W∗ B∗ )σ (W∗ A∗))X, (9)
+V,h 2 2,j h,j 1 1,j j
+where we denote Dh (X) := (cid:80)L exp(X⊤(P0 + σ (W∗ B∗ )σ (W∗ A∗)P0 X + c∗), and
+g,∗ j=1 Q,h 2 2,j h,j 1 1,j j K,h j
+G(cid:101)∗ := (cid:80)H
+h=1
+π
+h
+∗(cid:80)L
+j=1
+exp(c∗
+j′
+)δ
+(B∗ ,A∗)
+, W
+2
+∗
+,j
+∈ Rd¯×d¯, and W
+1
+∗
+,j
+∈ Rr×r. Due to the change of
+h,j j
+regression function, the least squares estimator is tailored to this setting as
+n
+(cid:88)
+G(cid:101)n := arg min (Y
+i
+−g
+G(cid:101)
+(X))2,
+G(cid:101)∈G H,L′(Θ(cid:101))
+i=1
+8
+--- PAGE 9 ---
+where we define
+H ℓ
+(cid:88) (cid:88)
+G
+H,L′
+(Θ(cid:101)) = {G(cid:101) = π
+h
+exp(c
+j
+)δ
+(W2,jB h,j ,W1,jAj)
+, ℓ ∈ [L′],(π
+h
+,c′
+j
+,W
+2,j
+,B
+h,j
+,W
+1,j
+,A
+j
+) ∈ Θ(cid:101)},
+h=1 j=1
+where Θ(cid:101) ⊂ [0,1]×R×Rd¯×d¯ ×Rd¯×r×Rr×r×Rr×d¯. Furthermore, the Voronoi loss of interest in this
+setting is given by
+(cid:12) (cid:12)
+H H L (cid:12) (cid:12)
+D 2 (G(cid:101),G(cid:101)∗ ) := (cid:88) |π τ(h) −π h ∗|+ (cid:88) π τ(h) (cid:88)(cid:12) (cid:12) (cid:88) exp(c i )−exp(c∗ h ) (cid:12) (cid:12)
+(cid:12) (cid:12)
+h=1 h=1 l=1(cid:12)i∈W (cid:12)
+l|h
+H L (cid:20)
+(cid:88) (cid:88) (cid:88)
++ π exp(c∗)(∥∆(W B) ∥+∥∆(W A) ∥)
+τ(h) i 2 h,il 1 h,il
+h=1 l=1 i∈W ,|W |=1
+l|h l|h
+(cid:21)
+(cid:88)
++ exp(c∗)(∥∆(W B) ∥2+∥∆(W A) ∥2) ,
+i 2 h,il 1 h,il
+i∈W ,|W |>1
+l|h l|h
+where ∆(W B) := W B −W B∗ and ∆(W A) := W A −W A∗. Above, the
+2 h,il 2,i τ(h),i 2,l h,l 1 h,il 1,i i 1,l l
+Voronoi cells are defined as W = {i ∈ [L′] : ∥H −H∗ ∥ ≤ ∥H −H∗ ∥,∀l ≠ j}, where
+j|h τ(h),i h,j τ(h),i h,l
+H := (W B,W A). With these ingredients in place, we are now ready to establish the sample
+2 1
+complexity of estimating low-rank matrices under the shared structure in Theorem 2.
+Theorem 2. Under the shared structure setting in Eq. (9), assume that the activation functions σ
+1
+and σ satisfy the condition in Appendix B.2, then we obtain
+2
+D
+2
+(G(cid:101)n ,G(cid:101)∗ ) = O
+P
+([log(n)/n]1/2). (10)
+The proof of Theorem 2 is in Appendix B.2. The bound in Eq. (10) indicates that the rates
+for estimating low-rank matrices W
+1,l
+A∗
+l
+and W
+2,l
+B
+h
+∗
+,l
+are at the order of O(cid:101)P (n−1/2) or O(cid:101)P (n−1/4),
+depending on the cardinality of the corresponding Voronoi cells.
+Sample complexity of estimating low-rank matrices. As a consequence, the above results
+imply that achieving estimators of the low-rank matrices with a given error ϵ requires only a
+polynomial number of data points of order O(ϵ−2) or O(ϵ−4). In contrast to the exponential
+sample complexity observed in the non-sharing structure, the sharing structure thus attains superior
+performance in terms of estimating low-rank matrices in the multi-head LoRA.
+4 Hyper-shared Low-rank Adaptation (HyRA)
+Motivated by the theoretical developments in Section 3, we introduce our practical method known
+as Hyper-shared Low-Rank Adaptation (HyRA). In the following formulations, we use underscore
+to highlight the learnable components.
+Vanilla LoRA. In the following formulations, we use underscore to highlight the learnable
+components. Recall that for the ith head in an attention layer, vanilla LoRA fine-tunes the query
+projection matrices W ∈ Rk×d and the value projection matrices W ∈ Rk×d as follows:
+Q,i V,i
+′ ′
+W = W +B A , W = W +B A .
+Q,i Q,i Q,i Q V,i V,i V,i V
+9
+--- PAGE 10 ---
+HyRA.First, wediscussthetranslationsfromourtheoreticalresultstothepracticalimplementation.
+In our theoretical analysis, Theorem 1 shows that under the non-shared structure setting, the sample
+complexity of estimating low-rank matrices in multi-head LoRA is suboptimal. The main reasons
+come from (i) a simple linear form of low-rank adapters in Eq. (6) and (ii) the lack of structure
+sharing of low-rank matrices across heads. Theorem 2 suggest that to substantially improve sample
+efficiency, we are encouraged to employ a shared structure across attention heads using joint
+hypernetworks to generate low-rank matrices, making low-rank adapters more expressive than the
+simple linear form. To this end, instead of optimizing these low-rank matrices independently and
+directly, we propose to generate these matrices with shared hypernetworks as follows:
+A = σ (W A),A = σ (W A);
+Q 1 Q,A V 1 V,A
+B = W σ (W LN(B )),B = W σ (W LN(B )).
+Q,i Q,B,2 2 B,1 i V,i V,B,2 2 B,1 i
+In this formulation, W V,B,1 ∈ Rd hid ×de , while W Q,B,2 ∈ R(r×d)×d hid is the concatenation of d hid
+low-rank matrices. B
+i
+∈ Rde is a learnable vector corresponding to the ith head where inputs A are
+matrices while inputs B are embedding vectors. For parameter efficiency, we implemented A as
+i
+diagonal matrices. The learnable matrices W and W are initialized with Kaiming uniform
+Q,A,1 Q,B,2
+initialization, while matrices W and W are initialized with zero initialization. σ and σ are
+V,A,1 V,B,2 1 2
+the activation functions, which we used the sigmoid functions in our experiments. We also initialize
+matrices W with Kaiming uniform initialization. Inspired by the phenomenon in [38], instead of
+B,1
+directlyusingastheinputB ,weapplyanon-learnablenormalizedlayerLN(x) = {x−E(x)}/Std(x)
+i
+to vector embeddings B = LN(B′). For a demonstration of HyRA, we refer to Figure 1.
+i i
+Benefits of shared structure across attention heads. We emphasize that the shared statistics
+are not limited to attention heads; they also extend across the key and value projection matrices. By
+sharingpartofthehypernetwork’sstructureacrossheadsandacrosskey/valueprojections, themodel
+captures common adaptation patterns, reducing redundancy and encouraging information sharing.
+At the same time, the head-specific second layers preserve the flexibility needed for specialization.
+This structured coupling introduces an implicit regularization effect, which both improves sample
+efficiency—since gradients from different heads contribute to shaping a shared representation—and
+reduces the risk of overfitting in low-data settings. Moreover, this parameterization is scalable: as
+model size and number of heads grow, the shared structure amortizes parameter costs, yielding an
+efficient and expressive adaptation mechanism.
+5 Experiments
+Experimental Settings. To evaluate the effectiveness of our method, our experiments span two
+tasks, including image classification and commonsense reasoning. We compare our method with full
+fine-tuning, LoRA [14], DoRA [28], Prefix Tuning [26], and Parallel Adapter [13]. We also conduct a
+sample efficiency experiment in Section 5 to clarify the efficiency of our design. The experiments
+were conducted on 1 A100-GPUs. To ensure consistency with the theoretical setting, we conduct
+experiments by applying low-rank matrices to the query and value matrices at each layer. In addition,
+we also provide an extended version where these matrices are applied to the proj_up and proj_down
+matrices under the LLaMA-13B setting in Ablation C.4. More details of hyperparameters are shown
+in Appendix C.1.
+10
+--- PAGE 11 ---
+Image Classification. We first evaluate our method on image classification using the Vision
+Transformer (ViT) [7] pretrained on ImageNet-21K [3]. Experiments are conducted on two widely
+adopted benchmarks: VTAB-1K [55] and FGVC.
+The VTAB-1K benchmark contains 19 classification tasks grouped into three categories—Natural,
+Specialized, and Structured—each with only 1,000 labeled examples for training. As shown in
+Table 1, HyRA achieves the strongest performance overall, with an average accuracy of 74.4%.
+Moreover, compared to LoRA, HyRA delivers consistent gains across all domains: +2.2% on Natural,
++2.1% on Specialized, and +2.2% on Structured tasks. These results demonstrate the effectiveness
+of stabilizing training while sharing information among attention heads. Detailed per-dataset results
+are reported in Appendix C.3.
+Table 1: Image Classification results on VTAB-1K.
+Method #Params. (%) Natural Specialized Structured AVG
+FFT - 75.89 83.38 47.64 65.6
+LoRA 0.39 79.4 84.55 59.78 72.2
+DoRA 0.40 80.33 85.15 60.11 72.8
+Adapter 0.18 79.01 84.08 58.49 71.4
+Prefix 0.16 77.06 82.3 52.0 67.6
+HyRA 0.47 81.67 86.68 61.96 74.4
+Figure 2: Sample efficiency on the com-
+monsense reasoning datasets.
+We next assess performance on the FGVC benchmark, which covers five fine-grained datasets:
+CUB-200-2011, NABirds, Oxford Flowers, Stanford Dogs, and Stanford Cars. As shown in Table 2,
+HyRA achieves the highest overall accuracy of 89.96%, outperforming all PEFT baselines as well as
+full fine-tuning. In particular, HyRA sets new best results on four out of five datasets: CUB-200-2011
+(88.6%), NABirds (85.9%), Oxford Flowers (99.2%), and Stanford Dogs (91.0%). On Stanford Cars,
+HyRA performs competitively (85.0%), while maintaining the best overall average. Compared to
+LoRA and DoRA, our method improves the average accuracy by notable margins of +5.2% and
++2.8%, respectively.
+Table 2: Image Classification Results on the FGVC Datasets
+Method #Params(%) CUB-200-2011 NABirds OxfordFlowers StanfordDogs StanfordCars AVG
+FFT - 87.3 82.7 98.8 89.4 84.5 88.54
+LoRA 0.55 84.6 78.2 98.9 85.1 77.1 84.78
+DoRA 0.57 87.3 80.0 99.1 87.6 81.9 87.18
+Adapter 0.47 87.1 84.3 98.5 89.8 68.6 85.66
+Prefix 0.42 87.5 82.0 98 74.2 90.2 86.38
+HyRA 0.64 88.6 85.9 99.2 91.0 85.0 89.96
+Together, these results highlight the dual strengths of our approach. On VTAB-1K, HyRA
+demonstrates superior generalization under data scarcity. On FGVC, it achieves strong fine-grained
+recognition. Across both settings, HyRA consistently advances the state of the art in PEFT, while
+introducing only an additional 0.09% learnable parameters relative to the total parameters.
+11
+--- PAGE 12 ---
+Commonsense Reasoning. We next evaluate its performance in the language domain on com-
+monsense reasoning. This benchmark consists of eight tasks (BoolQ, PIQA, SIQA, HellaSwag,
+WinoGrande, ARC-e, ARC-c, and OBQA) with predefined training and test splits. All these tasks
+evaluate the model through multiple-choice questions. Following the protocol of [15], we combine all
+tasks into a unified training dataset of approximately 150k examples. Experiments are conducted on
+LLaMA-7B and LLaMA-13B [44]. To ensure fairness, we adopt the same rank of 32 for LoRA, DoRA,
+and HyRA. As shown in Table 3, HyRA achieves the strongest performance across all tasks and
+model sizes. On LLaMA-7B, it improves over LoRA and DoRA by +1.7% and +1.0%, respectively,
+reaching 76.64%. On LLaMA-13B, HyRA attains 80.82% average accuracy, outperforming LoRA by
++2.6% and DoRA by +0.6%.
+Table 3: Results on the commonsense reasoning task
+Model Method #Params. (%) BoolQ PIQA SIQA HellaSwag WinoGrande ARC-e ARC-c OBQA AVG
+Prefix 0.11 64.3 76.8 79.3 42.1 72.1 72.9 54 60.6 65.26
+LoRA 0.25 67.2 79.4 76.6 78.3 78.4 77.1 61.5 74.2 74.09
+DoRA 0.25 67.22 79.98 76.66 80.66 79.72 79.5 61.01 74.8 74.94
+LLaMA-7B
+Adapter 0.99 63 79.2 76.3 67.9 75.7 74.5 57.1 72.4 70.76
+HyRA 0.28 68.59 81.5 79.07 81.42 80.51 80.01 63.82 78.2 76.64
+Prefix 0.03 65.3 75.4 72.1 55.2 68.6 79.5 62.9 68 68.38
+LoRA 0.2 71.7 82.4 79.6 90.4 83.6 83.1 68.5 82.1 80.18
+DoRA 0.2 72.2 83.19 80.81 88.92 81.93 82.95 69.37 81 80.05
+LLaMA-13B
+Adapter 0.8 71.8 83 79.2 88.1 82.4 82.5 67.3 81.8 79.51
+HyRA 0.21 72.42 84.17 80.25 91.43 82.95 83.21 69.11 83 80.82
+Sample Efficiency. In Section 3, we have presented the theoretical benefits of implementing
+shared statistics among different attention heads to enhance the sample efficiency. In this section,
+we empirically evaluate this claim by comparing the sample efficiency of HyRA with LoRA on the
+commonsense reasoning task on the LLaMA-7B setting. Following the approach of [9], we subsample
+each class at fractions f = {1%,10%,30%,50%,100%} and scale the number of training epochs
+by 1/f, ensuring the total number of data seen by the model remains constant. The results were
+presented in Figure 2 and Appendix C.2, where HyRA outperforms LoRA in average. Moreover,
+this gap is significant in a low-data regime, with the gap of more than 20% when subsampling 1% of
+the dataset, suggesting an improved sample efficiency of HyRA compared to vanilla LoRA.
+Ablation Studies. To provide a comprehensive assessment of computational cost, we compare the
+FLOPs and runtime of HyRA against LoRA and DoRA. Detailed results are presented in Appendix
+C.5. Notably, while HyRA introduces additional FLOPs during training due to the inclusion of
+hypernetworks, its runtime remains comparable to that of LoRA. Importantly, at inference time,
+all methods - including HyRA, LoRA, and DoRA - share identical FLOPs and runtime, as the
+hypernetworks used by HyRA are entirely discarded. This highlights HyRA’s practicality and
+efficiency. We also examine the validation loss curves of HyRA versus LoRA in Appendix C.5. The
+results demonstrate that HyRA achieves consistently better convergence, reinforcing its advantages
+not only in efficiency but also in optimization performance.
+12
+--- PAGE 13 ---
+6 Conclusion
+We introduce HyRA, a parameter-efficient fine-tuning method that addresses the limitations of
+LoRA. Viewing Multi-head LoRA through the lens of HMoE, HyRA enables parameter sharing
+across layers. By coupling low-rank matrices via shared structures, HyRA reduces redundancy while
+preserving flexibility. Our theory establishes stronger generalization guarantees, and our experiments
+show competitive performance with substantial parameter savings. However, the extent of parameter
+sharing needs to be chosen carefully as over-sharing can reduce expressiveness and lower performance.
+Additionally, our current evaluations are limited to transformer-based architectures and do not yet
+explore other types of models. Future work includes exploring adaptive sharing mechanisms that can
+dynamically balance efficiency and expressiveness, extending the method to different architectures,
+and conducting large-scale benchmarks on diverse downstream tasks.
+13
+--- PAGE 14 ---
+Supplement to “Hypernetwork-Driven Low-Rank Adaptation for
+Multi-Head Fine-Tuning”
+In this supplementary material, we review important related work in Appendix A, provide detailed
+theoretical verification in Appendix B, and present additional experiments in Appendix C to support
+our proposed mechanisms HyRA. Finally, we discuss the use of large language models in this paper
+in Appendix D.
+A Related works
+Attention The attention mechanism was first introduced to improve the sequence-to-sequence
+model in machine translation [2] by allowing models to dynamically focus on relevant parts of
+the input. [48] generalized this idea with the Transformer architecture, where scaled dot-product
+attention becomes the foundation of modern large language models. Since then, attention has been
+widely adopted across domains, including NLP [4], computer vision [7], and multi-model learning
+[42]. However, the quadratic complexity of attention in sequence length has motivated research to
+improve efficiency, such as sparse and low-rank approximation [21, 51]. These approaches aim to
+keep the expressiveness of attention while reducing its computational and space complexity, making
+it more practical for large-scale applications.
+Parameter-efficient Fine-tuning (PEFT) and Low-rank Adaptation (LoRA) With the
+growing size of models, full fine-tuning has become increasingly impractical. Parameter-efficient Fine-
+Tuning (PEFT) addresses this challenge by adapting models by training a relatively small number
+of parameters while keeping most pre-trained weights frozen [13, 25]. Existing approaches include
+Adapter-based, which insert lightweight modules into the Transformer layer [12], and Prompt-based,
+which add a learnable token to the input [52]. While effective, these approaches introduce inference
+latency compared to the original models.
+Among the PEFT methods, Low-rank Adaptation (LoRA) [14] has emerged as a simple but powerful
+PEFT method that does not add extra inference burden. LoRA assumes that weight updates during
+fine-tuning occur in a low-rank subspace and reparameterized weight updates are represented as the
+product of two low-rank matrices. Since the low-rank components can be merged into the pre-trained
+weights after training, LoRA doesn’t add extra inference cost compared to the original model. Due
+to its efficiency and strong empirical results, LoRA has become a widely adopted baseline for PEFT
+in both academic research and real-world applications. In natural language processing, it is employed
+for tasks such as domain adaptation, instruction tuning, summarization, question answering, and
+text generation [16]. Moreover, LoRA-based approaches have been extended to areas like federated
+learning, speech synthesis, and reinforcement learning, supporting scalable model adaptation in
+distributed and resource-limited settings [53]. Recent extensions, such as MTLoRA, have enhanced
+its applications in multi-task learning for more efficient transfer learning in foundation models [1],
+DoRA [28] decomposes weight updates into magnitude and directional components, AdaLoRA [56]
+dynamically adjusts rank allocation, ReLoRA [27] notably increases the expressivenes of LoRA
+by proposing a strategy to train high-rank models with low-rank updates, and VeRA [22] shares
+a pair of frozen random matrices across layers with a learnable scaling factor. Recently, [46] and
+[40] integrated Bayesian inference into LoRA fine-tuning, improving robustness and generalization
+through uncertainty-aware and distributionally robust adaptation mechanisms. These developments
+highlight LoRA’s role as a foundation for modern PEFT research.
+14
+--- PAGE 15 ---
+(Hierachical) Mixture of Experts (HMoE) The Mixture of Experts framework [17] combines
+multiple experts with a gating function that adaptively assigns inputs to experts. From that
+foundation, early work [43] showed that sparsely-gated MoE layers can effectively scale models’
+capacity by activating only a subset of experts per input. This design has since been applied to
+large language models [8], computer vision [41], and multi-modal learning [11], showing strong
+gains in scalability and efficiency [35, 34, 37]. More recently, theoretical work has highlighted the
+connection between MoE and Multi-head Self-attention [23, 45], motivating new parameter-efficient
+fine-tuning methods. Hierarchical Mixture of Experts [19] arranges experts into a tree-like structure
+with gating occurring at multiple levels. Instead of routing an input directly to an expert, the gating
+functions make sequential decisions at each level of the hierarchy, which improves training efficiency
+by narrowing down the relevant subset of experts. As an advanced variant of MoE,it has been
+shown to handle complex data structures more effectively as well as enhance both generalization and
+computational efficiency [39, 57, 58] by allowing different branches of the hierarchy to specialize in
+different regions of the input space.
+HyperNetwork The HyperNetwork framework [10] introduces an approach where the parameters
+of a target model are not learned directly but are instead generated by an auxiliary neural network,
+referredtoasHyperNetwork. Earlierworkfocusedonrecurrentneuralnetworks,whereHyperNetwork
+improved generalization and adaptability by producing context-dependent updates [10]. Later work
+explores this idea to continual learning, where task-specific weights generated by a HyperNetwork
+mitigated catastrophic forgetting [50]. In the context of parameter-efficient fine-tuning (PEFT),
+HyperNetworks have been used to share adaptation across tasks and reduce redundancy. For
+example, [30] proposed using HyperNetwork to generate task-specific adapter weights for multi-task
+fine-tuning, significantlyreducingthenumberofparameterswhilemaintainingstrongperformance, or
+[26] uses HyperNetworks to extend Prompt tuning by using Hypernetworks to generate the additional
+parameters, instead of optimizing those parameters directly. Recently, [45] and [35] have investigated
+the theoretical benefits of those hypernetworks in different PEFT methods, and have shown that the
+usage of HyperNetworks is beneficial in enhancing the sample efficiency. Additionally, HyperPEFT
+[6] examines the effectiveness of hypernetworks in parameter-efficient fine-tuning, demonstrating that
+using a shared hypernetwork promotes knowledge transfer across tasks in pre-trained models, which
+helps reduce catastrophic forgetting and reveals underlying relationships between tasks. These works
+have highlighted HyperNetwork as a powerful tool for PEFT that reduces the number of parameters
+by learning through a lightweight Hypernetwork, improving both efficiency and flexibility.
+B Proofs of Theoretical Results
+B.1 Proof of Theorem 1
+In this section, we present a detailed analysis of Theorem 1.
+Proof of Theorem 1. The proof of this theorem includes two steps:
+Step 1. The L2 density distance may be small compared to the Voronoi loss.
+In this step, we show that the following limit satisfies for all r ≥ 1:
+∥g −g ∥
+lim inf G G∗ L2(µ) = 0. (11)
+ϵ→0G∈G H,L′(Θ(cid:98)):D1,r(G,G∗)≤ϵ D 1,r (G,G ∗ )
+15
+--- PAGE 16 ---
+To demonstrate this inequality, we can construct a sequence of mixing measure such that
+lim D (G ,G ) = 0 and lim ∥g −g ∥ /D (G ,G ) = 0.
+n→∞
+1,r n ∗
+n→∞
+G G∗ L2(µ) 1,r n ∗
+To prove this, we can consider the sequence
+H L+1
+(cid:88) (cid:88)
+G n = π h n exp(cn i )δ Bn ,An ,Bn ,An
+Q,h,j Q,h,j V,h,j V,h,j
+h=1 i=1
+such that
+• πn = π∗ for any 1 ≤ h ≤ H.
+h h
+1 1
+• exp(cn) = exp(cn) = exp(c∗)+ and exp(cn) = exp(c∗ ) for any 3 ≤ i ≤ L+1.
+1 2 2 1 2nr+1 i i−1
+• Bn = Bn = B∗ and Bn = B∗ for any 3 ≤ i ≤ L+1.
+Q,h,1 Q,h,2 Q,h,1 Q,h,i Q,h,i−1
+• An = An = A∗ and An = A∗ for any 3 ≤ i ≤ L+1.
+Q,h,1 Q,h,2 Q,h,1 Q,h,i Q,h,i−1
+• Bn = B∗ +n−1e (A∗ )−1, Bn = B∗ −n−1e (A∗ )−1 and Bn = B∗
+V,h,1 V,h,1 11 V,h,1 V,h,2 V,h,1 11 V,h,1 V,h,i+1 V,h,i
+for any 3 ≤ i ≤ L+1.
+• An = An = A∗ and An = A∗ for any 3 ≤ i ≤ L+1,
+V,h,1 V,h,2 V,h,1 V,h,i V,h,i−1
+here we denote e be the matrix that all of its coefficients are equal to 0, except (1,1)-coefficient,
+11
+which is equal to 1, and, without loss of generality, we assume that det(A∗ ) ̸= 0 (which implies
+V,1
+that A∗ is invertible). Then, it is evident that π(h) = h for all h ∈ [H]. Accordingly, the loss
+V,1
+function takes the form
+H H (cid:20) (cid:21)
+1 (cid:88) (cid:88) 1 1
+D (G ,G ) = π + π exp(c∗)+ · ∥A∗ ∥ = O(n−r),
+1,r n ∗ nr+1 h h 1 nr+1 nr V,h,1
+h=1 h=1
+which implies D (G ,G ) → 0.
+1,r n ∗
+Next, we show that lim ∥g −g ∥ /D (G ,G ) = 0. Let
+n→∞ Gn G∗ L2(µ) 1,r n ∗
+L
+(cid:88)
+Dh (x) = exp(X⊤(P0 +B∗ A∗ )P0 +c∗),
+g,∗ Q,h Q,h Q,h K,h j
+l=1
+L
+(cid:88)
+Dh (x) = exp(X⊤(P0 +Bn An )P0 +cn),
+g,n Q,h Q,h Q,h K,h j
+l=1
+we take into account the discrepancy
+L (X) := g (X)−g (X)
+n Gn G∗
+= (cid:88) H π (cid:16)(cid:88) L (cid:0) exp(X⊤(P Q 0 ,h +B Q n ,h,j An Q,h,j )P K 0 ,h X +cn j ) ·(P0 +Bn An )X
+h Dh (X) V,h V,h,j V,h,j
+h=1 j=1 g,n
+exp(X⊤(P0 +B∗ A∗ )P0 X +c∗) (cid:17)
+− Q,h Q,h,j Q,h,j K,h j ·(P0 +B∗ A∗ )X (cid:1)
+Dh (X) V,h V,h,j V,h,j
+g,∗
+H
+(cid:88)
+:= π L˜h(X).
+h n
+h=1
+16
+--- PAGE 17 ---
+We examine the decomposition of Lh(X) = Dh (X)L˜h(X):
+n g,∗ n
+L
+(cid:88) (cid:88) (cid:104)
+Lh(X) = exp(cn) exp(X⊤(P0 +Bn An )P0 X)(P0 +Bn An )X
+n i Q,h Q,h,j Q,h,j K,h V,h V,h,j V,h,j
+l=1i∈V
+l|h
+(cid:105)
+−exp(X⊤(P0 +B∗ A∗ )P0 X)(P0 +B∗ A∗ )X
+Q,h Q,h,j Q,h,j K,h V,h V,h,j V,h,j
+L
+(cid:88) (cid:88) (cid:104) (cid:105)
+− exp(X⊤(P0 +Bn An )P0 X))−exp(X⊤(P0 +B∗ A∗ )P0 X)) g (X)
+Q,h Q,h,j Q,h,j K,h Q,h Q,h,j Q,h,j K,h Gn
+l=1i∈V
+l|h
+ 
+L
++ (cid:88)  (cid:88) exp(cn i )−exp(c∗ l )exp(P Q 0 ,h +B Q ∗ ,h,j A∗ Q,h,j ) (cid:2) (P V 0 ,h +B V ∗ ,h,j A∗ V,h,j )−g Gn (x) (cid:3)
+l=1 i∈V
+l|h
+:= Ah(X)−Bh(X)+Ch(X).
+n n n
+Based on the definition of Bn , An , Bn , An , we obtain
+Q,h,i Q,h,i V,h,i V,h,i
+2 (cid:20) (cid:21)
+(cid:88) 1 1 (cid:16) (cid:17)
+Ah(X) = exp(c∗)+ exp X⊤(P0 +B∗ A∗ )P0 X) (Bn An −B∗ A∗ )X
+n 2 1 nr+1 Q,h Q,h,1 Q,h,1 K,h V,h,i V,h,i V,h,1 V,h,1
+i=1
+(cid:20) (cid:21)
+1 1 (cid:16) (cid:17)
+= exp(b )+ exp X⊤(P0 +B∗ A∗ )P0 X) [(Bn An −B∗ A∗ )
+2 ∗,1 nr+1 Q,h Q,h,1 Q,h,1 K,h V,h,1 V,h,1 V,h,1 V,h,1
++(Bn An −B∗ A∗ )]X
+V,h,2 V,h,2 V,h,2 V,h,2
+= 0.
+1
+The last equality can be justified by Bn An − B∗ A∗ = e and Bn An −
+V,h,1 V,h,1 V,h,1 V,h,1 n 11 V,h,2 V,h,2
+1
+B∗ A∗ = − e . Also, from the choice that Bn = B∗ and An = A∗ , we
+V,h,2 V,h,2 n 11 Q,h,1 Q,h,1 Q,h,1 Q,h,1
+have Bh(X) = 0. In addition, from the value of cn and c∗, it is straightforward to deduce that
+n i l
+Ch(X) = O(n−(r+1)). Combining these results gives us Lh(X)/D (G ,G ) → 0. Also noting that
+n n 1,r n ∗
+the term Dh (X) is bounded given that the parameter space Θ(cid:98) and input space X are compact, we
+g,∗
+have L˜h(X)/D (G ,G ) → 0 for almost every X. By summing up these results for h, we have
+n 1,r n ∗
+L (X)/D (G ,G ) → 0 for almost every X. This result implies that
+n 1,r n ∗
+∥g −g ∥ /D (G ,G ) → 0,
+Gn G∗ L2(µ) 1,r n ∗
+which illustrates Eq. (11).
+Step 2: Apply Le Cam’s two-point argument.
+We conclude the proof by showing the minimax property of the estimator
+inf sup E [D (G¯ ,G)] ≳ n−1/2.
+G¯ n∈G H,L′(Θ(cid:98))G∈G H,L′(Θ(cid:98))\GH,L−1(Θ(cid:98))
+gG 1,r n
+Now, Eq. (11) implies that for ϵ > 0 and a fixed constant c > 0 determined later, there exists
+a mixing measures G′ ∈ G (Θ) satisfying D (G′,G ) = 2ϵ and ∥g −g ∥ ≤ C ϵ. Using
+∗ k 1,r ∗ ∗ G′ ∗ G∗ L2(µ) 1
+17
+--- PAGE 18 ---
+Le Cam’s two points argument in [54] with weak triangle inequality property for the Voronoi loss
+function D , we have
+1,r
+inf sup E [D (G¯ ,G)]
+G¯ n∈G H,L′(Θ(cid:98))G∈G H,L′(Θ(cid:98))\GH,L−1(Θ(cid:98))
+gG 1,r n
+D (G′,G )
+≳ 1,r ∗ ∗ exp (cid:0) −nE [KL(N(g (X),σ2I ),N(g (X),σ2I ))] (cid:1) .
+8
+X∼µ G′
+∗
+d¯ G′
+∗
+d¯
+Bearing in mind that the KL divergence between two Gaussian distributions can be calculated as
+∥g (X)−g (X)∥2
+KL(N(g (X),σ2I ),N(g (X),σ2I )) = G′ ∗ G∗ .
+G′ ∗ d¯ G∗ d¯ 2σ2
+As a result, we have
+inf sup E [D (G¯ ,G)]
+G¯ n∈G H,L′(Θ(cid:98))G∈G H,L′(Θ(cid:98))\GH,L−1(Θ(cid:98))
+gG 1,r n
+≳ ϵ·exp(−n∥g −g ∥2 )
+G′ ∗ G∗ L2(µ)
+≳ ϵ·exp(−C nϵ2), (12)
+1
+Here, we choose ϵ = n−1/2, it follows that ϵ·exp(−C nϵ2) = n−1/2exp(−C ). Consequently, the
+1 1
+minimax lower bound in equation Eq. (11) is attained, thereby completing the proof.
+B.2 Proof of Theorem 2
+Before delving into the details of the proof, it is important to note that the analysis can be reduced
+to the case where both W and W are identity matrices for each j. Consequently, we may
+1,j 2,j
+assume without loss of generality that σ (W∗ B∗ ) = σ (B∗ ) and σ (W∗ A∗) = σ (A∗). The
+2 2,j h,j 2 h,j 1 1,j j 1 j
+central ingredient of the proof is the model convergence property, namely that the estimator g
+G(cid:101)n
+converges to g at a rate of order O([log(n)/n]1/2).
+G∗
+Proposition 1 (Model convergence). Given the least square estimator G(cid:101)n , the convergence rate
+of the regression function estimation g to the true regression function g under the L2(µ) is
+G(cid:101)n G(cid:101)∗
+parameteric on the sample size, i.e.
+(cid:112)
+∥g −g ∥ = O( log(n)/n). (13)
+G(cid:101)n G(cid:101)∗ L2(µ)
+Although the proof of this result is presented later, it is worth noting that, as Eq. (13) is established,
+we leverage the model convergence result to derive parameter convergence, employing a Taylor
+expansion for the local analysis and applying Fatou’s lemma for the global analysis.
+Assumption. We impose the following distinguishability assumptions on the two functions.
+(A.1) (Algebraic Independence) If there exists two couples of parameter matrices (B,A) and (B˜,A˜)
+such that
+σ (B)σ (A) = σ (B˜)σ (A˜),
+2 1 2 1
+then it follows that B = B˜ and A = A˜.
+(A.2) (Uniform Lipschitz) Consider
+F(X,A,B) := exp(X⊤(P0 +σ (B)σ (A))X)(P0 +σ (B)σ (A))X,
+Q 2 1 V 2 1
+18
+--- PAGE 19 ---
+then for any η ∈ {1,2} and index β = (β ,β ) ∈ Nr×d¯ ×Nd¯×r
+1 2
+(cid:13)(cid:32) (cid:33) (cid:13)
+(cid:88) (cid:13) ∂|β|F ∂|β|F (cid:13)
+(cid:13) (X,A,B)− (X,A′,B′) γβ(cid:13) ≤ C∥(A,B)−(A′,B′)∥ξ∥γ∥η,
+(cid:13)
+(cid:13)
+∂Aβ1∂Bβ2 ∂Aβ1∂Bβ2 (cid:13)
+(cid:13)
+|α|=η
+for any vector γ ∈ R2d¯r, and for some positive constants ξ and C that are independent of the input
+X and the parameters A,B.
+(A.3) (Strong identifiability) For any non-negative integer ℓ ≥ 0 and any collection of distinct
+parameter matrices {(B ,A )} , the functions in the set below are almost surely independent in
+j j j∈[ℓ]
+X:
+(cid:110)
+X(u), X(u)X⊤σ (B ), X(u)σ (A )X, X⊤σ (B ), σ (A )X,
+2 j 1 j 2 j 1 j
+X(u)X(v), X(u)X(v)[X⊤σ (B )]2, X(u)X(v)[σ (A )X]2,
+2 j 1 j
+(cid:111)
+X(u)X(v)X⊤σ (B )σ (A )X : j ∈ [ℓ], u,v ∈ [d]
+2 j 1 j
+Return to the proof of Theorem 2. Throughapermutation,withoutlossofgenerality,wecansuppose
+that τ(h) = h for all h ∈ [H]. The focus of this argument is to establish the following inequality:
+inf ∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G∗) > 0. (14)
+G(cid:101)∈G H,L′(Θ(cid:101))
+We can divide our demonstration into two parts. The first part, namely local part, is to establish
+Eq. (14) when D
+2
+(G(cid:101),G(cid:101) ∗) is small enough
+ϵ
+l
+→
+im
+0G∈G H,L′(Θ(cid:101)
+i
+)
+n
+:D
+f
+2(G(cid:101),G(cid:101)∗)≤ϵ
+∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G(cid:101) ∗) > 0. (15)
+The Taylor expansion is the main tool used to resolve this problem in the local regime. The global
+part of the proof concerns the behavior of this property when D
+2
+(G(cid:101),G(cid:101) ∗) is sufficiently large.
+inf ∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G(cid:101) ∗) > 0.
+G(cid:101)∈G H,L′(Θ(cid:101)):D2(G(cid:101),G(cid:101)∗)>ϵ
+Proof of local part Eq. (15)
+Suppose that Eq. (15) does not hold, i.e.
+ϵ
+l
+→
+im
+0G(cid:101)∈G H,L′(Θ(cid:101)
+i
+)
+n
+:D
+f
+2(G(cid:101),G(cid:101)∗)≤ϵ
+∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G(cid:101) ∗) = 0.
+Remember that we can denote
+L exp(X⊤(P0 +Bn An )P0 X +cn)
+gh (X) = (cid:88) Q,h h,j h,j K,h j ·(P0 +Bn An )X,
+G(cid:101)n
+j=1
+D
+g
+h
+,n
+(X) V,h h,j h,j
+L exp(X⊤(P0 +B∗ A∗ )P0 X +c )
+gh (X) = (cid:88) Q,h h,j h,j K,h j ·(P0 +B∗ A∗ )X,
+G(cid:101)∗
+j=1
+D
+g
+h
+,∗
+(X) V,h h,j h,j
+19
+--- PAGE 20 ---
+where
+L
+(cid:88)
+Dh (X) = exp(X⊤(P0 +B∗ A∗ )P0 +c∗),
+g,∗ Q,h h,j h,j K,h j
+l=1
+L
+(cid:88)
+Dh (X) = exp(X⊤(P0 +Bn An )P0 +cn).
+g,n Q,h h,j h,j K,h j
+l=1
+Then, we have
+H H
+(cid:88) (cid:88)
+g (X) = πngh (X), g (X) = π∗gh (X).
+G(cid:101)n h G(cid:101)n G(cid:101)∗ h G(cid:101)∗
+h=1 h=1
+Step 1 - Decomposition the discrepancy between regression functions.
+Thefirststepofthisproofincludesdecomposethequantityg (X)−g (X)usingTaylorexpansion.
+Recall that
+G(cid:101)n G(cid:101)∗
+L (X) := g (X)−g (X)
+n G(cid:101)n G(cid:101)∗
+H H
+(cid:88) (cid:88)
+= πngh (X)− π∗gh (X)
+h G(cid:101)n h G(cid:101)∗
+h=1 h=1
+H H
+(cid:88) (cid:88)
+= πn(gh (X)−gh (X))+ (πn−π∗)gh (X)
+h G(cid:101)n G(cid:101)∗ h h G(cid:101)∗
+h=1 h=1
+H H
+(cid:88) (cid:88)
+:= πnL˜h(X)+ (πn−π∗)gh (X),
+h n h h G(cid:101)∗
+h=1 h=1
+where L˜h(X) = gh (X)−gh (X).
+n G(cid:101)n G(cid:101)∗
+Each term Lh(X) = Dh (X)L˜h(X) can be decomposed as
+n g,∗ n
+L
+(cid:88) (cid:88) (cid:104)
+Lh(X) = exp(c ) exp(X⊤(P0 +σ (Bn )σ (An))X)(P0 +σ (Bn )σ (An))
+n n,i Q,h 2 h,i 1 i V 2 h,i 1 i
+j=1i∈W
+j|h
+(cid:105)
+−exp(X⊤(P0 +σ (B∗ )σ (A∗))X)(P0 +σ (B∗ )σ (A∗))
+Q,h 2 h,j 1 j V 2 h,j 1 j
+L
+(cid:88) (cid:88) (cid:104)
+− exp(c ) exp(X⊤(P0 +σ (Bn )σ (Ani))X) (16)
+n,i Q,h 2 h,i 1 s
+j=1i∈W
+j|h
+(cid:105)
+−exp(X⊤(P0 +σ (B∗ )σ (A∗))X) gh (X)
+Q,h 2 h,i 1 i Gn
+L
++ (cid:88)(cid:0) (cid:88) exp(c )−exp(c∗) (cid:1) exp(X⊤(P0 +σ (B∗ )σ (A∗))X)
+n,i j Q,h 2 h,j 1 j
+j=1 i∈W
+j|h
+:= Ah(X)−Bh(X)+Ch(X). (17)
+n n n
+20
+--- PAGE 21 ---
+Decomposition for the function Ah(X). Let
+n
+R(X;B,A) = exp(X⊤(P0 +σ (B)σ (A))X),
+Q 2 1
+S(X;B,A) = (P0 +σ (B)σ (A))X,
+V 2 1
+G(X;B,A) = R(X;B,A)S(X;B,A).
+Our term Ah can be decomposed based on the number of element in each Voronoi cells
+n
+(cid:88) (cid:88)
+Ah = exp(c )[G(X;Bn ,An)−G(X;B∗ ,A∗)]
+n n,i h,i i h,j j
+j:|W j|h |=1i∈A j|u,h
+(cid:88) (cid:88)
++ exp(c )[G(X;Bn ,An)−G(X;B∗ ,A∗)]
+n,i h,i i h,j j
+j:|W j|h |>1i∈W j|h
+:= Ah +Ah .
+n,1 n,2
+Using the first-order Taylor expansion, we have
+(cid:88)
+∂|α|R
+R(X;Bn ,An) = R(X;B∗ ,A∗)+ (∆A )α1(∆Bh )α2 (X;B∗ ,A∗)+R (X),
+h,i i h,j j n,ij n,ij ∂Aα1∂Bα2 h,j j ij,1
+|α|=1
+(cid:88)
+∂|α|S
+S(X;Bn ,A ) = S(X;B∗ ,A∗)+ (∆A )α1(∆Bh )α2 (X;B∗ ,A∗)+R (X),
+n,i n,i h,j j n,ij n,ij ∂Aα1∂Bα2 h,j j ij,2
+|α|=1
+for any i and j satisfying i ∈ W and W = 1. In the formulas above, R (X) and R (X)
+j|h j|h ij,1 ij,2
+denote the Taylor expansion remainder. The results above gives us
+Ah (X) = (cid:88) (cid:88) exp(c n,i ) (cid:88)(cid:110) (∆A )α1(∆Bh )α1 ∂αR (X;B∗ ,A∗)S(X;B∗ A∗)
+n,1 α! n,ij n,ij ∂Aα1Bα2 h,j j h,j j
+j:|W j|h |=1i∈W j|h |α|=1
+∂αS (cid:111)
++(∆A )α1(∆Bh )α1R(X;B∗ A∗) (X;B∗ ,A∗) +Rh (X)
+n,ij n,ij h,j j ∂Aα1Bα2 h,j j n,1
+(cid:88) (cid:88)(cid:110) ∂|α|R
+= U¯h (X;B∗ A∗)S(X;B∗ A∗)
+n,j,α∂Aα1Bα2 h,j j h,j j
+j:|W |=1|α|=1
+j|h
+∂αS (cid:111)
++U¯h R(X;B∗ A∗) (X;B∗ ,A∗) +Rh ,
+n,j,α h,j j ∂Aα1Bα2 h,j j n,1
+where the reminder is small compared with the loss function Rh /D (Gn,G ), which is due to the
+n,1 2 ∗
+uniform Lipschitz property of function G. Here, the coefficients U¯h are defined as
+n,j,α
+U¯h = (cid:88) exp(c n,i ) (∆A )α1(∆Bh )α2,∀α : |α| = 1.
+n,j,α1,α2 α! n,ij n,ij
+i∈W
+j|h
+21
+--- PAGE 22 ---
+For Ah , using the Taylor expansion up to second order, we have
+n,2
+(cid:88) (cid:88) (cid:110) ∂αR
+Ah = U¯h (X;B∗ ,A∗)S(X;B∗ A∗)
+n,2 n,j,α1,α2∂Aα1Bα2 h,j j h,j j
+j:|Aj|>11≤|α|≤2
+(cid:110) ∂αS (cid:111)
++ U¯h R(X;B∗ A∗) (X;B∗ ,A∗)
+n,j,α1,α2 h,j j ∂Aα1Bα2 h,j j
+(cid:88)
+∂|α|R ∂|β|S
++ U¯h (X;B∗ ,A∗) (X;B∗ ,A∗)+R (X),
+n,j,α1,β1,α2,β2∂Aα1∂Bα2 h,j j ∂Aβ1∂Bβ2 h,j j n,2
+|α|=1,|β|=1
+where the remainder R (X) is small compared with D (Gn,G ): R (X)/D (Gn,G ) → 0. Here,
+n,2 2 ∗ n,2 2 ∗
+the coefficients take the following forms:
+U¯h = (cid:88) exp(c n,i ) (∆A )α1(∆Bh )α2,∀|α| = 2
+n,j,α1,α2 α! n,ij n,ij
+i∈W
+j|h
+U¯h = (cid:88) exp(c n,i ) (∆A )α1+β1(∆Bh )α2+β2,∀|α| = |β| = 1.
+n,j,α1,β1,α2,β2 α!β! n,ij n,ij
+i∈W
+j|h
+Simple calculation gives us the following formulation of the partial derivative of R(X;B,A) and
+S(X;B,A):
+∂R
+(X;B,A) = X(u)σ′(A(u))X⊤σ (B)exp(X⊤(P0 +σ (B)σ (A))),
+∂A(u) 1 2 Q 2 1
+∂R
+(X;B,A) = X(u)σ (A(u))X⊤σ′(B)exp(X⊤(P0 +σ (B)σ (A)))
+∂B(u) 1 2 Q 2 1
+∂2R (cid:104) (cid:105)
+(X;B,A) = X(u)X(v)σ′(A(u))σ′(A(v))(X⊤σ (B))2+1 X(u)σ”(A(u))X⊤σ (B)
+∂A(u)∂A(v) 1 1 2 u=v 1 2
+×exp(X⊤(P0 +σ (B)σ (A)))
+Q 2 1
+∂2R (cid:104) (cid:105)
+(X;B,A) = X(u)X(v)σ′(B(u))σ′(B(v))(X⊤σ (A))2+1 X(u)σ”(B(u))X⊤σ (B)
+∂B(u)∂B(v) 2 2 2 u=v 2 2
+×exp(X⊤(P0 +σ (B)σ (A)))
+Q 2 1
+∂2R (cid:104) (cid:105)
+(X;B,A) = X(u)X(v)σ′(A(u))σ′(B(v))+X(u)σ′(B(u))X⊤σ (B)
+∂A(u)∂B(v) 1 2 1 2
+×exp(X⊤(P0 +σ (B)σ (A))X(v))
+Q 2 1
+∂S
+(X;B,A) = X(u)σ′(A)σ (B)
+∂A(u) 1 2
+∂S
+(X;B,A) = X(u)σ (A)σ′(B)
+∂B(u) 1 2
+∂2S
+(X;B,A) = 1 X(u)σ”(A)σ (B)
+∂A(u)∂A(v) u=v 1 2
+∂2S
+(X;B,A) = 1 X(u)σ (A)σ ′′(B)
+u=v 1 2
+∂B(u)∂B(v)
+∂2S
+(X;B,A) = 1 X(u)σ′(A)σ′(B)
+∂A(u)∂B(v) u=v 1 2
+22
+--- PAGE 23 ---
+Plugging these formulations into the functions Ah (X) and Ah (X), we achieve that
+n,1 n,2
+(cid:88) (cid:104)
+Ah (X) = exp(X⊤(P0 +B∗ A∗ )P0 X) (V¯⊤ XX⊤σ (B∗ )
+n,1 Q,h h,j h,j K,h h,n,1,j 2 h,j
+j:|W |=1
+j|h
+(cid:105)
++V¯⊤ Xσ (A∗)X)(P0 +σ (B∗ )σ (A∗))X +V¯⊤ Xσ (B∗ )+σ (A∗)XV¯ +R (X)
+h,n,1,j 1 j V 2 j,h 2 j h,n,1,j 2 h,j 1 j h,n,2,j n,1
+(cid:88) (cid:104)
+Ah (X) = exp(X⊤(P0 +σ (B∗ )σ (A∗))X) (V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)X),
+n,2 Q,h 2 h,j 1 j h,n,1,j 2 h,j h,n,2,j 1 j
+j:|W |>1
+j|h
++X⊤V¯ X(X⊤σ (B∗ )+V¯⊤ XX⊤σ (B∗ )+X⊤V¯ X(σ (A∗)X)2+V¯⊤ Xσ (A∗)X
+h,n,1,j 2 h,j h,n,4,j 2 h,j h,n,5,j 1 j h,n,6,j 1 j
++X⊤V¯ X +X⊤V¯ XX⊤σ (B∗ σ (A∗)X)×(P0 +σ (B∗)σ (A∗))X +V¯⊤ Xσ (B∗)
+h,n,7,j h,n,7,j 2 h,j 1 j V 2 j 1 j h,n,1,j 2 j
+(cid:105)
++σ (A∗)+V¯⊤ Xσ (B∗)+σ (A∗)XV¯ +V¯⊤ X +R (X),
+1 j h,n,4,j 2 j 1 j h,n,6,j h,n,7,j h,n,2
+where the values of V¯ ,...,V¯ are given by
+h,n,1,j h,n,7,j
+V¯ := (U¯ σ′(A(u)))d
+h,n,1,j h,n,j,eu,0 d 1 u=1
+V¯ := (U¯ σ′(A(u)))d
+h,n,2,j h,n,j,0 d ,eu 2 u=1
+V¯ := (U¯ σ′(A(u))σ′(A(v)))d
+h,n,3,j h,n,j,eu+ev,0 d 1 1 u,v=1
+V¯ := (U¯ σ′′(A(u)))d
+h,n,4,j h,n,j,2eu,0 d 1 u=1
+V¯ := (U¯ σ′(B(u))σ′(B(v)))d
+h,n,5,j h,n,j,eu+ev,0 d 2 2 u,v=1
+V¯ := (U¯ σ′′(B(u)))d
+h,n,6,j h,n,j,0 d ,2eu 2 u=1
+V¯ := (U¯ σ′(B(u))σ′(B(v)))d
+h,n,7,j n,j,eu,ev 1 2 u,v=1
+Here, e denotes the u-th canonical basis vector in Rd, that is, the vector whose u-th component
+u
+equals 1 and all other components equal 0. Similarly, e denotes the canonical basis matrix in Rd×d,
+uv
+with a 1 in the (u,v)-th entry and 0 elsewhere.
+Decomposition of the function B (X). Consider the function Bh(X), we decompose it as
+n n
+(cid:88) (cid:88) (cid:104) (cid:105)
+Bh(X) = exp(c ) R(X;Bh ,A )−R(X;B∗ ,A∗) gh (X)
+n n,i n,i n,i h,j j Gn
+j:|W j|h |=1i∈W j|h
+(cid:88) (cid:88) (cid:104) (cid:105)
++ exp(c ) R(X;Bh ,Ah )−R(X;B∗ ,A∗) gh (X)
+n,i n,i n,i h,j j Gn
+j:|W j|h |>1i∈W j|h
+:= Bh (X)+Bh (X).
+n,1 n,2
+Using Taylor’s expansions up to the first order for Bh and the second order for Bh , we have
+n,1 n,2
+(cid:88) (cid:88)
+∂αR
+Bh = U¯h (X;B∗ ,A∗)gh (X)+Rh (X)
+n,1 n,j,α1,α2∂Aα1Bα2 h,j j Gn n,3
+j:|W |=1|α|=1
+j|h
+(cid:88) (cid:88)
+∂αR
+Bh = U¯h (X;B∗ ,A∗)gh (X)+Rh (X)
+n,2 n,j,α1,α2∂Aα1Bα2 h,j j Gn n,4
+j:|W |=11≤|α|≤2
+j|h
+23
+--- PAGE 24 ---
+wheretheTaylorremaindersRh (X)andRh (X)aresmallcomparedwithD (G ,G ): Rh (X)/D (G ,G ) →
+n,3 n,4 2 n ∗ n,3 2 n ∗
+0, and Rh (X)/D (G ,G ) → 0. This leads to
+n,4 2 n ∗
+(cid:88) (cid:104) (cid:105)
+Bh (X) = exp(X⊤(Ph +σ (B∗ )σ (A∗))X) V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)X gh (X)
+n,1 Q,h 2 h,j 1 j h,n,1,j 2 h,j h,n,2,j 1 j Gn
+j:|W |=1
+j|h
++Rh X
+n,3
+Bh (X) = (cid:88) exp(X⊤(Ph +σ (B∗ )σ (A∗))X) (cid:2) V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)X
+n,2 Q,h 2 h,j 1 j h,n,1,j 2 h,j h,n,2,j 1 j
+j:|W |>1
+j|h
++X⊤V¯ X(X⊤σ (B∗))2+V¯⊤ XX⊤σ (B∗ )σ (A∗)X (cid:3) gh (X)+Rh X.
+h,n,3,j 2 j h,n,4,j 2 j,n 1 j Gn n,4
+Putting all the above results together, the function Lh(X) can be represented as
+n
+(cid:88) (cid:104)
+Lh(X) = exp(X⊤(P0 +B∗ A∗ )P0 X) (V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)X)
+n Q,h h,j h,j K,h h,n,1,j 2 h,j h,n,2,j 1 j
+j:|W |=1
+j|h
+(cid:105)
+×(P0 +σ (B )∗σ (A∗))X +V¯⊤ Xσ (B∗ )+σ (A∗)XV¯
+V 2 j,h 1 j h,n,1,j 2 h,j 1 j h,n,2,j
+(cid:88) (cid:104)
++ exp(X⊤(P0 +B∗ A∗ )P0 X) (V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)X
+Q,h h,j h,j K,h h,n,1,j 2 h,j h,n,2,j 1 j
+j:|W |>1
+j|h
++X⊤V¯ X(X⊤σ (B∗ ))2+V¯⊤ XX⊤σ (B∗ )+X⊤V¯ X(σ (A∗)X)2
+h,n,3,j 2 h,j h,n,4,j 2 h,j h,n,5,j 1 j
++V¯⊤ Xσ (A∗)X +X⊤V¯ X +X⊤V¯ XX⊤σ (B∗ )σ (A∗)X)
+h,n,6,j 1 j h,n,7,j h,n,7,j 2 h,j 1 j
+×(P0 +σ (B∗ )σ (A∗)X)+V¯⊤ Xσ (B⊤ )+σ (A∗)XV¯ +V¯⊤ Xσ (B∗)
+V,h 2 j,h 1 j h,n,1,j 2 h,j 1 j h,n,2,j h,n,4,j 2 j
+(cid:105)
++σ (A∗)XV¯ +V¯⊤ )X
+1 j h,n,6,j h,n,7,j
+(cid:88) (cid:104) (cid:105)
+− exp(X⊤(P0 +σ (B )σ (A∗))X) V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)X g (X)
+Q 2 h,j 1 j h,n,1,j 2 h,j h,n,2,j 1 j G(cid:101)n
+j:|W |=1
+j|h
+(cid:88) (cid:104)
+− exp(X⊤(P0 +σ (B )σ (A∗))X) V¯⊤ XX⊤σ (B∗ )+V¯⊤ Xσ (A∗)XX⊤
+Q 2 h,j 1 j h,n,1,j 2 h,j h,n,2,j 1 j
+j:|W |>1
+j|h
++X⊤V¯ X(X⊤σ (B∗ ))2+V¯⊤ XX⊤σ (B∗ )+X⊤V¯ X(X⊤σ (A∗))2
+h,n,3,j 2 h,j h,n,4,j 2 h,j h,n,5,j 1 j
+(cid:105)
++V¯⊤ Xσ (A∗)X +X⊤V¯ X +X⊤V¯ XX⊤σ (B∗ )σ (A∗)X g (X)
+h,n,6,j 1 j h,n,7,j h,n,7,j 2 h,j 1 j G(cid:101)n
+L
++ (cid:88) T¯ exp(X⊤(P0 +B∗ A∗ )P0 X) (cid:2) (P0 +B∗ A∗)X −g (X) (cid:3)
+n,j Q,h h,j h,j K,h V h,j j G(cid:101)n
+j=1
++Rh (X)+Rh (X)−Rh (X)−Rh (X), (18)
+n,1 n,2 n,3 n,4
+where T¯h := (cid:80) exp(c )−exp(c∗) for any j ∈ [L].
+n,j i∈W n,i j
+j|h
+Step 2 - Non-vanishing coefficients. The Eq. (18) shows that the ratio L (X)/D can be
+n 2n
+24
+--- PAGE 25 ---
+decomposed as a linear combination of the following independent function
+gh (x),
+G(cid:101)∗
+1
+R(X;B∗ ,A∗)X(u)X⊤σ (B∗)S(X;B∗,A∗),
+Dh (X) h,j j 2 j j j
+g,∗
+1
+R(X;B∗ ,A∗)X(u)σ (A∗)XS(X;B∗,A∗),
+Dh (X) h,j j 1 j j j
+g,∗
+1 1
+X(u)σ (B∗), R(X;B∗ ,A )σ (A∗)Xe ,
+Dh (X) 2 j Dh (X) h,j j 1 j u
+g,∗ g,∗
+1
+R(X;B∗ ,A∗)X(u)X(v)(X⊤σ (B∗ ))2S(X;B∗ ,A∗),
+Dh (X) h,j j 2 h,j h,j j
+g,∗
+1
+R(X;B∗ ,A∗)X(u)X(v)(σ (A∗)X)2S(X;B∗ ,A∗),
+Dh (X) h,j j 1 j h,j j
+g,∗
+1
+R(X;B∗ ,A∗)X(u)σ (A∗)XS(X;B∗ ,A∗),
+Dh (X) h,j j 1 j h,j j
+g,∗
+1
+R(X;B∗ ,A∗)X(u)X(v)S(X;B∗ ,A∗),
+Dh (X) h,j j h,j j
+g,∗
+1
+R(X;B∗ ,A∗)X(u)X(v)X⊤σ (B∗ )XS(X;B∗ ,A∗),
+Dh (X) h,j j 2 h,j h,j j
+g,∗
+1 1
+R(X;B∗ ,A∗)X(u)X⊤σ (B )g⊤ , R(X;B∗ ,A∗)X(u)X⊤σ (A )g⊤ ,
+D
+g
+h
+,∗
+(X) h,j j 2 j,h G(cid:101)n D
+g
+h
+,∗
+(X) h,j j 1 j G(cid:101)n
+1 1
+R(X;B∗ ,A∗)X(u)X(v)(X⊤σ (B ))2gh , R(X;B∗ ,A∗)X(u)X⊤σ (B )gh ,
+D
+g
+h
+,∗
+(X) h,j j 2 j,h G(cid:101)n D
+g
+h
+,∗
+(X) h,j j 2 j,h G(cid:101)n
+1 1
+R(X;B∗ ,A∗)X(u)X(v)(σ (A )X)2gh , R(X;B∗ ,A∗)X(u)σ (B )Xgh ,
+D
+g
+h
+,∗
+(X) h,j j 1 j G(cid:101)n D
+g
+h
+,∗
+(X) h,j j 1 j,h G(cid:101)n
+1 1
+R(X;B∗ ,A∗)X(u)X(v)gh , R(X;B∗ ,A∗)X(u)X(v)X⊤σ (B )σ (A )Xgh ,
+D
+g
+h
+,∗
+(X) h,j j G(cid:101)n D
+g
+h
+,∗
+(X) h,j j 2 j,h 1 j G(cid:101)n
+1 1
+R(X;B∗ ,A∗)S(X;B∗ ,A∗), R(X;B∗ ,A∗)gh ,
+D
+g
+h
+,∗
+(X) h,j j h,j j D
+g
+h
+,∗
+(X) h,j j G(cid:101)n
+for any indices 1 ≤ h ≤ H, 1 ≤ j ≤ L, and 1 ≤ u ,v ,u ,v ≤ d.
+1 2 2 2
+We establish that in the limit n → ∞, there exists at least one coefficient of these functions that does
+not disappear. Assume by contrary that all these coefficients of these linear independent functions
+go to 0. From Eq. (18), we obtain that U¯ /D , U¯ /D , and T¯ /D go to
+h,n,j,α1,α2 2n h,n,j,α1,β1,α2,β2 2n h,n,j 2n
+0 for all the coefficient α ,β ,α ,β ∈ Rd×d satisfying that 1 ≤ |α |+|β |+|α |+|β | ≤ 2.
+1 1 2 2 1 1 2 2
+Consider the coefficient of gh (x), we have
+G(cid:101)∗
+1
+|πn−π∗| → 0. (19)
+D h h
+2n
+Since T¯h /D → 0, we have for any j ∈ [L]
+n,j 2n
+(cid:12) (cid:12)
+D 1 π h n (cid:12) (cid:12) (cid:12) (cid:12) (cid:88) exp(c n,i )−exp(c∗ j ) (cid:12) (cid:12) (cid:12) (cid:12) = | D T¯ n h ,j | → 0.
+2n 2n
+(cid:12)i∈W (cid:12)
+j|h
+25
+--- PAGE 26 ---
+Taking the summation with respect to j ∈ [L] and h ∈ [H], we have
+(cid:12) (cid:12)
+H L (cid:12) (cid:12)
+D 1 (cid:88) π h n (cid:88)(cid:12) (cid:12) (cid:12) (cid:88) exp(c i )−exp(c∗ h ) (cid:12) (cid:12) (cid:12) → 0. (20)
+2n
+h=1 l=1(cid:12)i∈W (cid:12)
+l|h
+For index j ∈ [L] such that |W | = 1, the limits U¯ /D → 0 implies that
+j|h h,n,j,eu,0 d 2n
+1 (cid:88) (cid:88)
+πn exp(c )∥∆A ∥ → 0.
+D h n,i n,ij 1
+2n
+j:|W j|h |=1i∈W j|h
+Noting that in Euclidean finite-dimensional space, all the norms are equivalent, we can express the
+equation above using ℓ norm, before summing up with respect to l and h:
+2
+H
+1 (cid:88) (cid:88) (cid:88)
+πn exp(c )∥∆A ∥ → 0.
+D h n,i n,ij
+2n
+h=1 j:|W j|h |=1i∈W j|h
+Analogously, since U¯ /D → 0, it also follows that
+h,n,j,0
+d
+,eu 2n
+1 (cid:88) (cid:88)
+πn exp(c )∥∆B ∥ → 0,
+D h n,i n,ij 1
+2n
+j:|W j|h |=1i∈W j|h
+which implies that
+H
+1 (cid:88) (cid:88) (cid:88)
+πn exp(c )(∥∆A ∥+∥∆Bh ∥) → 0. (21)
+D h n,i n,ij n,ij
+2n
+h=1 j:|W j|h |=1i∈W j|h
+The similar argument also demonstrates that for W > 1, the limits U¯ /D → 0 and
+j|h h,n,j,2eu,0 d 2n
+U¯ /D → 0 imply
+h,n,j,0
+d
+,2eu 2n
+H
+1 (cid:88) (cid:88) (cid:88)
+πn exp(c )(∥∆A ∥+∥∆Bh ∥) → 0. (22)
+D h n,i n,ij n,ij
+2n
+h=1 j:|W j|h |>1i∈W j|h
+By putting all the results in Eq. (19), Eq. (20), Eq. (22), and Eq. (22) together, we achieve that
+1 = D2n → 0, which is a contradiction. As a result, at least one of the coefficients of the linear
+indep D e2nndent functions in L (X)/D does not vanish as n → ∞.
+n 2n
+Step 3 - Application of the Fatou’s lemma. Denote m¯ as the maximum of the absolute values
+n
+of the coefficients of the linear independent functions in L (X)/D . Given that at least one of
+n 2n
+these coefficients does not vanish, we have 1/m¯ ̸→ 0 as n → ∞. Since ∥h −h ∥ /D → 0
+as n → ∞, we also have ∥h −h ∥ /m¯ D n → 0. Using Fatou’s lem G(cid:101) mna, we G(cid:101)∗ha L v 2 e (µ) 2n
+G(cid:101)n G(cid:101)∗ L2(µ) n 2n
+∥g −g ∥ (cid:90) |g (X)−g (X)|
+0 = lim G(cid:101)n G(cid:101)∗ L2(µ) ≥ liminf G(cid:101)n G(cid:101)∗ dµ(X) ≥ 0.
+n→∞ m¯ n D 2n n→∞ m¯ n D 2n
+As a consequence, we achieve that
+|g (X)−g (X)|
+liminf G(cid:101)n G(cid:101)∗ = 0, a.s.X.
+n→∞ m¯ n D 2n
+26
+--- PAGE 27 ---
+When n → ∞, we denote
+T¯ V¯
+h,n,j → λ¯ , h,n,τ,j → λ¯
+0,j h,τ,j
+m¯ D m¯ D
+n 2n n 2n
+for any indices h ∈ [H], j ∈ [L], τ ∈ [7], bearing in mind that at least one element of the
+set {λ¯ ,λ¯ : j ∈ [L],τ ∈ [7]} is not equal to 0. Given the notation above, the limit
+h,0,j h,τ,j
+liminf |g G(cid:101)n (X)−g G(cid:101)∗ (X)| can be expressed as
+n→∞ mnD2n
+H
+(cid:88) (cid:88) (cid:104)
+exp(X⊤(P0 +B∗ A∗ )P0 X) (λ¯⊤ XX⊤σ (B∗ )+λ¯⊤ Xσ (A∗)X)
+Q,h h,j h,j K,h h,1,j 2 h,j h,2,j 1 j
+h=1j:|W |=1
+j|h
+(cid:105)
+×(P0 +σ (B∗ σ (A∗))X +λ¯⊤ Xσ (B∗ )+σ (A∗)Xλ¯
+V 2 h,j 1 j h,1,j 2 h,j 1 j h,2,j
+H
+(cid:88) (cid:88) (cid:104)
++ exp(X⊤(P0 +B∗ A∗ )P0 X) (λ¯⊤ XX⊤σ (B∗ )
+Q,h h,j h,j K,h h,1,j 2 h,j
+h=1j:|W |>1
+j|h
++λ¯⊤ Xσ (A∗)X +X⊤λ¯ X(X⊤σ (B∗ ))2+λ⊤ XX⊤σ (B∗ )+X⊤λ¯ X(σ (A∗ )X)2
+h,2,j 1 j h,3,j 2 h,j h,4,j 2 h,j h,5,j 1 h,j
++λ⊤ Xσ (A∗)X +X⊤λ¯ X +X⊤λ¯ XX⊤σ (B∗ )σ (A∗)X)
+h,6,j 1 j h,7,j h,7,j 2 h,j 1 j
+(cid:105)
+×(P0 +σ (B )∗σ (A∗))X +λ¯⊤ Xσ (B∗ )+σ (A∗)Xλ¯ +λ¯⊤ Xσ (B∗ )+σ (A∗)Xλ¯ +λ⊤ X
+V 2 j,h 1 j h,1,j 2 h,j 1 j h,2,j h,4,j 2 h,j 1 j h,6,j h,7,j
+H
+(cid:88) (cid:88) (cid:104) (cid:105)
+− exp(X⊤(P0 +B∗ A∗ )P0 X) λ¯⊤ XX⊤σ (B∗ )+λ¯⊤ Xσ (A∗)X g (X)
+Q,h h,j h,j K,h h,1,j 2 h,j h,2,j 1 j G(cid:101)n
+h=1j:|W |=1
+j|h
+H
+(cid:88) (cid:88) (cid:104)
+− exp(X⊤(P0 +B∗ A∗ )P0 X) λ¯⊤ XX⊤σ (B∗ )+λ¯⊤ Xσ (A∗)X
+Q,h h,j h,j K,h h,1,j 2 h,j h,2,j 1 j
+h=1j:|W |>1
+j|h
++X⊤λ¯ X(X⊤σ (B∗ ))2+λ¯⊤ XX⊤σ (B∗ )+X⊤λ¯ X(σ (A∗)X)2
+h,3,j 2 h,j h,4,j 2 h,j h,5,j 1 j
+(cid:105)
++λ¯⊤ Xσ (A∗)X +X⊤λ¯ X +X⊤λ¯ XX⊤σ (B∗ )σ (A∗)X g (X)
+h,6,j 1 j h,7,j h,7,j 2 h,j 1 j G(cid:101)n
+H L
+(cid:88)(cid:88) (cid:104) (cid:105)
++ λ¯ exp(X⊤(P0 +B∗ A∗ )P0 X) (P0 +B∗ A∗)−g (X) = 0. (23)
+0,j Q,h h,j h,j K,h V h,j j G(cid:101)∗
+h=1j=1
+for almost surely X. Nevertheless, this equation implies that all the coefficients {λ¯ ,λ¯ : j ∈
+h,0,j τ,j
+[L],τ ∈ [7]} are 0’s, which is a contradiction. As a consequence, we achieve that
+ϵ
+l
+→
+im
+0G(cid:101)∈G H,L′(Θ(cid:101)
+i
+)
+n
+:D
+f
+2(G(cid:101),G(cid:101)∗)≤ϵ
+∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G(cid:101) ∗) > 0
+Proof of global part (Eq. (15))
+The proof in local part shows that there exists a constant ϵ′ such that
+G(cid:101)∈G H,L′(Θ(cid:101)
+i
+)
+n
+:D
+f
+2(G(cid:101),G(cid:101)∗)≤ϵ′
+∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G(cid:101)∗ ) > 0.
+To complete the proof of this result, we show the global part that
+G(cid:101)∈G H,L′(Θ(cid:101)
+i
+)
+n
+:D
+f
+2(G(cid:101),G(cid:101)∗)>ϵ′
+∥g
+G(cid:101)
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101),G(cid:101)∗ ) > 0.
+27
+--- PAGE 28 ---
+The proof of the above equation relies mostly on the identifiability of mixing measure in G (Θ).
+L
+Assume by contradiction that this claim does not hold, then there exists a sequence of measure
+G(cid:101)n = (cid:80)L
+j=1
+exp(c
+n,j
+)δ
+(Wn ,Bn ,Wn ,An )
+∈ G
+H,L′
+(Θ(cid:101)) such that
+2,j h,j 1,j h,j
+(cid:40)
+D
+2
+(G(cid:101)n ,G(cid:101)∗ ) > ϵ′
+∥g
+G(cid:101)n
+−g
+G(cid:101)∗
+∥
+L2(µ)
+/D
+2
+(G(cid:101)n ,G
+∗
+) → 0,
+as n → ∞. Without loss of generality, we can suppose that both Wn and Wn are identity matrices.
+2,j 1,j
+As a result, we have ∥g −g ∥ → 0 as n → ∞. From the hypothesis that the parameter
+G(cid:101)n G(cid:101)∗ L2(µ)
+space Θ is a compact set, there exists a mixing measure G(cid:101) ∈ G
+H,L′
+(Θ(cid:101)) such that one of the G(cid:101)n ’s
+subsequence converges to G(cid:101) . By extracting this sequence, without loss of generality, we can suppose
+that G(cid:101)n → G(cid:101) ′. Since D
+2
+(G(cid:101)n ,G(cid:101)∗ ) > ϵ′ for all n ≥ 1, we obtain that D
+2
+(G(cid:101) ′,G(cid:101)∗ ) ≥ ϵ′. Using the
+Fatou’s lemma, we have
+(cid:90)
+0 = lim ∥g −g ∥ = lim ∥g (X)−g (X)∥2dµ(X)
+n→∞ G(cid:101)n G(cid:101)∗ L2(µ) n→∞ G(cid:101)n G∗
+(cid:90)
+= liminf∥g (X)−g (X)∥2dµ(X) ≥ 0.
+n→∞ G(cid:101)n G(cid:101)∗
+As a result, g
+G(cid:101)′
+(X) = g
+G(cid:101)∗
+(X) for almost surely X, which implies from identifiability in G
+H,L′
+(Θ(cid:101))
+that G(cid:101) ′ ≡ G(cid:101)∗ . Thus, D
+2
+(G(cid:101) ′,G(cid:101)∗ ) = 0, which is a contradiction with the fact that D
+2
+(G(cid:101) ′,G(cid:101)∗ ) ≥ ϵ′.
+This completes our proof.
+Proof for identifiability property. In this part, we prove that the equality g (X) = g (X) for
+G(cid:101) G(cid:101)∗
+almost sure every X implies the identity G(cid:101) = G(cid:101)∗ . For the convenience of presentation, we simplify
+the softmax notation that, for any mixing measure G(cid:101) = (cid:80)H
+h=1
+(cid:80)L
+j=1
+exp(c
+j
+)δ
+(B∗ ,A∗)
+, we denote
+h,j j
+exp(u)
+softmax (u) = ,
+G(cid:101) (cid:80)L exp(X⊤(P0 +σ (Bh))σ (A ))X +c )
+j=1 Q 2 j 1 j j
+where u ∈ {X⊤(P0 +σ (B )σ (A ))X +c : j ∈ [L]}. The equation g (X) = g (X) implies
+that
+Q 2 h,j 2 j j G(cid:101) G(cid:101)∗
+H L
+(cid:88) (cid:88)
+π softmax(X⊤(P0 +σ (B )σ (A ))X +c )(P0 +σ (B∗ )σ (A∗))X
+h Q 2 h,j 2 j j V,h 2 h,j 1 j
+h=1 j=1
+H L′
+(cid:88) (cid:88)
+= π softmax(X⊤(P0 +σ (B¯ )σ (A¯ ))X +c∗)(P0 +σ (B¯∗ )σ (A¯∗))X.
+h Q 2 h,j 2 j j V,h 2 h,j 1 j
+h=1 j=1
+From this equation, we can deduce that
+L
+(cid:88)
+softmax(X⊤(P0 +σ (B )σ (A ))X +c )(P0 +σ (B∗ )σ (A∗))X
+Q 2 h,j 2 j j V,h 2 h,j 1 j
+j=1
+L′
+(cid:88)
+= softmax(X⊤(P0 +σ (B¯ )σ (A¯ ))X +c∗)(P0 +σ (B¯∗ )σ (A¯∗))X. (24)
+Q 2 h,j 2 j j V,h 2 h,j 1 j
+j=1
+28
+--- PAGE 29 ---
+This equation implies that L = L′, and
+{softmax(X⊤(P0+σ (B )σ (A ))X+c ) : j ∈ [L]} = {softmax(X⊤(P0+σ (B¯ )σ (A¯ ))X+c∗) : j ∈ [L]}
+Q 2 h,j 2 j j Q 2 h,j 2 j j
+for almost surely X. Up to a permutation, we can assume without loss of generality that for any
+j ∈ [L] that
+softmax(X⊤(P0 +σ (B )σ (A ))X +c ) = softmax(X⊤(P0 +σ (B¯ )σ (A¯ ))X +c∗).
+Q 2 h,j 2 j j Q 2 h,j 2 j j
+Given the invariance to translation of the softmax function, Eq. (24) implies that
+L
+(cid:88)
+exp(c )exp(X⊤(P0 +σ (B )σ (A )X))(P0 +σ (B )σ (A ))X
+j Q 2 h,j 1 j V 2 h,j 1 j
+j=1
+L
+(cid:88)
+= exp(c∗)exp(X⊤(P0 +σ (B¯ )σ (A¯ )X))(P0 +σ (B¯ )σ (A¯ ))X
+j Q 2 h,j 1 j V 2 h,j 1 j
+j=1
+for almost surely X.
+Noting that the index set [L] can be partitioned into m¯ subsets K¯ ,...,K¯ where m ≤ L such that
+1 m
+exp(c ) = exp(c∗) for any indices j,j′ ∈ K¯ and i ∈ [m¯], we can write the equation above into
+j j′ i
+m¯
+(cid:88) (cid:88)
+exp(c )exp(X⊤(P0 +σ (B )σ (A )))X
+j Q 2 h,j 1 j
+i=1j∈K¯
+i
+m¯
+(cid:88) (cid:88)
+= exp(c∗)exp(X⊤(P0 +σ (B¯ )σ (A¯ )))X
+j Q 2 h,j 1 j
+i=1j∈K¯
+i
+for almost surely X. The above equation implies that
+{(P0 +σ (B )σ (A )) : j ∈ K¯ } = {(P0 +σ (B¯ )σ (A¯ )) : j ∈ K¯ }
+V 2 h,j 1 j i V 2 h,j 1 j i
+Given that the activation σ and σ are algebraically independent, the above result demonstrates
+1 2
+that
+m¯ m¯
+(cid:88) (cid:88) (cid:88) (cid:88)
+exp(c )δ = exp(c∗)δ .
+j (B h,j ,Aj) j (B h ∗ ,j ,A∗ j )
+i=1j∈K¯
+i
+i=1j∈K¯
+i
+As a consequence, we achieve that G(cid:101) ≡ G(cid:101)∗ , which completes our proof.
+Proof of Proposition 1. The proof of Proposition 1 can be implemented using the following steps.
+Step 1: Equivalence between least square estimator and MLE.
+Bearing in mind that the sample (X ,Y ),...,(X ,Y ) ∈ Rd¯ ×Rd¯ are i.i.d. from the regression
+1 1 n n
+model
+Y = g (X )+ϵ , i = 1,...,n,
+i G(cid:101)∗ i i
+such that the noises ϵ ,...,ϵ are independent and follow the Gaussian distribution: E[ϵ |X ] = 0
+1 n i i
+and Var[ϵ |X ] = σ2I for all i ∈ [n]. In addition, g follows the following form
+i i d¯ G¯
+∗
+H L exp(X⊤(P0 +σ (W∗ B∗ )σ (W∗ A∗)P0 X +c∗)
+(cid:88) (cid:88) Q,h 2 2,j h,j 1 1,j j K,h j
+g (X) = π
+G(cid:101)∗ h D
+h
+(X)
+h=1 j=1
+×(P0 +σ (W∗ B∗ )σ (W∗ A∗))X
+V,h 2 2,j h,j 1 1,j j
+29
+--- PAGE 30 ---
+where we denote D (X) = (cid:80)L exp(X⊤(P0 +σ (W∗ B∗ )σ (W∗ A∗)P0 X +c∗). Also, we
+h j=1 Q,h 2 2,j h,j 1 1,j j K,h j
+consider the least-square estimator G(cid:101)n of the form
+n
+(cid:88)
+G(cid:101)n := arg min ∥Y
+i
+−g
+G(cid:101)
+(X
+i
+)∥2.
+G(cid:101)∈G H,L′(Θ(cid:101))
+i=1
+Using the Gaussianity assumption of ϵ |X for all i ∈ [n], we achieve that Y |X ∼ N(g (X ),σ2I )
+i i i i G(cid:101)∗ i d¯
+for all i ∈ [n]. As a result, the least square estimator G¯ is actually a maximum likelihood estimator
+n
+with respect to the data Y |X ,...,Y |X :
+1 1 n n
+n
+1 (cid:88)
+G(cid:101)n ∈ arg max
+n
+log(p(Y
+i
+|g
+G(cid:101)
+(X
+i
+),σ2I
+d¯
+),
+G(cid:101)∈G H,L′(Θ(cid:101))
+i=1
+where p(Y |g (X ),σ2I ) denotes the multivariate Gaussian distribution with mean g (X ) and
+i G(cid:101) i d¯ G(cid:101) i
+covariance matrix σ2I .
+d¯
+Step 2: Main ingredients for measuring regression function and their usefulness.
+Let P
+H,L
+denotes the set of conditional density of all mixing measures in G(cid:101)H,L′ (Θ(cid:101)), i.e. P
+H,L′
+(Θ(cid:101)) :=
+{p
+G
+(Y|X),G(cid:101) ∈ G
+H,L′
+(Θ(cid:101))}. In addition, we denote
+P˜
+H,L′
+(Θ(cid:101)) := {p
+(G(cid:101)+G(cid:101)∗)/2
+(Y|X) : G(cid:101) ∈ G
+H,L′
+(Θ(cid:101))}
+P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101)) := {p 1
+(G
+/
+(cid:101)
+2
++G(cid:101)∗)/2
+(Y|X) : G(cid:101) ∈ G
+H,L′
+(Θ(cid:101))}
+For each δ > 0, we denote the Hellinger’s ball in P˜1/2 (Θ(cid:101)) around the conditional density p (Y|X):
+H,L′ G(cid:101)
+P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),δ) := {p1/2 ∈ P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101)) : d
+H
+(p,p
+G(cid:101)∗
+) ≤ δ}.
+Lastly, as suggested in ([47]), we quantify the measure of the above set by
+(cid:90) δ
+J(δ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),δ)) := H
+B
+1/2 (t,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),t),∥·∥
+L2(µ)
+)dt∨δ,
+δ2/213
+where H
+B
+(t,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),t),∥ · ∥
+L2(µ)
+) denotes the bracketing entropy of P˜
+H
+1/
+,
+2
+L
+(Θ(cid:101),t) under L2-norm,
+while t∨δ = max(t,δ).
+Employing similar argument of Theorem 7.4 and Theorem 9.2 in [47], it is tractable to achieve the
+following lemma.
+Lemma 1. Consider Ψ(δ) ≥ J(δ,P 1/2 (Θ,δ)) such that Ψ(δ)/δ2 is a non-increasing function of δ.
+HL √
+Then, there exist a universal constant c and a sequence (δ ) such that nδ2 ≥ cΨ(δ ) and
+n n n
+(cid:16) (cid:17)
+(cid:18) nδ2(cid:19)
+P E [d (p (·|X),p (·|X))] > δ ≤ cexp −
+X H G(cid:101)n G(cid:101)∗ ν2
+for all δ ≥ δ .
+n
+The main part of the proof consists of demonstrating the upper bound for the bracketing entropy for
+any 0 < ϵ ≤ 1/2
+30
+--- PAGE 31 ---
+Lemma 2. We can bound the bracket entropy H by
+B
+H
+B
+(ϵ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),t),∥·∥
+L2(µ)
+) ≲ log(1/ϵ). (25)
+If this estimation holds, since it is straightforward to check that
+H
+B
+(ϵ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),t),∥·∥
+L2(µ)
+) ≤ H
+B
+(ϵ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),t),d
+H
+)
+where d denotes the Hellinger’s distance, we have
+H
+(cid:90) δ (cid:90) δ
+J
+B
+(δ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),δ)) ≤ H
+B
+1/2 (ϵ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),t),d
+H
+)dt∨δ ≲ log(1/t)dt∨δ. (26)
+δ2/213 δ2/213
+Consider Ψ(δ) = δ·[log(1/δ)]1/2, the it is obvious that Ψ(δ)/δ2 is non-increasing function of δ. In
+a
+√
+ddition, Eq. (26) implies that Ψ(δ) ≥ J
+B
+(δ,P˜
+H
+1/
+,
+2
+L′
+(Θ(cid:101),δ)). By choosing δ
+n
+= (cid:112) log(n)/n, we have
+nδ2 ≥ cΨ(δ ) for some universal constant c. An application of Lemma 1 leads us to the conclusion
+n n
+of Proposition 1:
+(cid:112)
+d (p(Y|g (X),σ2I ),p(Y|g (X),σ2I )) = O( log(n)/n), (27)
+H G(cid:101)n d G(cid:101)∗ d
+where d denotes the Hellinger distance. The closed form of Hellinger distance between two
+H
+multivariate normal distance gives us
+(cid:26) (cid:27)
+1
+d (p(Y|g (X),σ2I ),p(Y|g (X),σ2I )) = 1−exp − ∥g (X)−g (X)∥2 .
+H G(cid:101)n d G(cid:101)∗ d 8σ2 G(cid:101)n G(cid:101)∗
+In consequence, for n sufficiently large, there exists some universal constant C such that the above
+inequality implies
+(cid:18) (cid:19)
+1
+∥g (X)−g (X)∥2 ≤ 8σ2log ≤ 16σ2Clog(n)/n.
+G(cid:101)n G(cid:101)∗ 1−Clog(n)/n
+From this inequality, we have
+(cid:112)
+∥g (X)−g (X)∥ = O( log(n)/n),
+G¯
+n
+G¯
+∗
+or ∥g −g ∥ = O ( (cid:112) log(n)/n). This concludes the proof of this proposition.
+G(cid:101)n G(cid:101)∗ L2(µ) P
+Proof of the bound in Eq. (25).
+Step 3: Relation between bracket entropy and covering number.
+The first step of this proof includes establishing the upper bound for the multivariate Gaussian
+density p (·|X). Noting that the variance effect σ2 is fixed, we have
+G(cid:101)
+(cid:32) (cid:33)
+1 ∥Y −g (X)∥2 1
+p (Y|X) = exp − G(cid:101) ≤ .
+G(cid:101) (2πσ2)d/2 2σ2 (2πσ2)d/2
+Since the input space X and parameter space Θ(cid:101) are bounded, there exists a constant M such that
+∥g G(cid:101) (X)∥ ≤ M for G(cid:101) ∈ G H,L′ and X ∈ X. Thus, for any ∥Y∥ ≥ 2M, we have ∥Y−g 2 G σ (cid:101) 2 (X)∥2 ≥ ∥ 8 Y σ ∥ 2 2,
+which leads to
+(cid:32) (cid:33)
+1 ∥Y −g (X)∥2 1 (cid:18) ∥Y∥2(cid:19)
+p(Y|g (X),σ2I ) = exp − G(cid:101) ≤ exp − .
+G(cid:101)
+d¯
+(2πσ2)d/2 2σ2 (2πσ2)d/2 8σ2
+31
+--- PAGE 32 ---
+Define the integrable function
+ (2πσ2)−d/2 for ∥Y∥ ≤ 2M,
+
+K(Y|X) = (cid:18) ∥Y∥2(cid:19)
+(2πσ2)−d/2exp − for ∥Y∥ > 2M,
+
+8σ2
+then the above estimations give us p(Y|g (X),σ2I ) ≤ K(Y|X) for all Y and X ∈ X.
+G(cid:101)
+d¯
+Forη < ϵ,consideranη-cover{µ
+1
+,...,µ
+n
+}ofP
+H,L′
+(Θ(cid:101))underℓ
+1
+-normsuchthatN := N(η,P
+H,L′
+(Θ(cid:101)),∥·
+∥ ). Then, the brackets of the form [L (Y|X),U (Y|X)], for 1 ≤ i ≤ N, can be constructed as
+1 i i
+L (Y|X) := max{µ (Y|X)−η,0},
+i i
+U (Y|X) := max{µ (Y|X)+η,K(Y|X)}.
+i i
+ItisstraightforwardtocheckthatP
+H,L′
+(Θ(cid:101)) ⊂ (cid:83)N
+i=1
+[L
+i
+(Y|X),U
+i
+(Y|X)]andL
+i
+(Y|X)−U
+i
+(Y|X) ≤
+min{η,K(Y|X)}. From this, we can achieve the following upper bound
+(cid:90) (cid:90)
+∥U −L ∥ = |U (Y|X)−L (Y|X)|d(X,Y)+ |U (Y|X)−L (Y|X)|d(X,Y)
+i i 1 i i i i
+∥Y∥≤2M ∥Y∥>2M
+(cid:18) K2(cid:19)
+≤ Kη+exp − ≤ K′η,
+2σ2
+√
+where K := max{2M, 8σ2}log(1/η), K′ be a positive constant. From the definition of bracket
+entropy, given that H
+B
+(K′η,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) is the logarithm of the smallest number of bracket of
+size K′η necessary to cover P
+H,L′
+(Θ(cid:101)), we have
+H
+B
+(K′η,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) ≤ log(N) = logN(η,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+).
+If we can achieve the upper bound for the covering number logN(η,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) ≲ log(1/η),
+then we achieve
+H
+B
+(K′η,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) ≲ log(1/η).
+By choosing ϵ = ϵ/K′, noting that Hellinger distance is upper bounded by ℓ norm, we have
+1
+H
+B
+(ϵ,P
+H,L′
+(Θ(cid:101)),d
+H
+) ≤ H
+B
+(ϵ,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) ≲ log(1/ϵ).
+Step 4: Bound covering number.
+Now, it is our turn to bound the covering number N. To do this, let Γ := {(π ,...,π ) : (cid:80)h π =
+1 h i=1 i
+1, and π ≥ 0} and ∆ = {(B ,A ) : (B ,A ) ∈ Ω}. Given that the parameter space Ω is
+i h,j j h,j j
+compact, as well as Γ is also a compact space, there exists ξ-cover for Γ and ∆, which can be denoted
+as Γ and ∆ , respectively. In addition, it is straightforward to verify that
+ξ ξ
+|Γ | ≤ O(ξ−(H−1)), |∆ | ≤ O(ξ−(2rdHL∗)).
+ξ ξ
+For a mixing measure G = (cid:80)H π (cid:80)L exp(c )δ ∈ G , let (c¯ ,B¯ ,A¯ ) ∈ ∆ such that
+h=1 h j=1 j (B h,j ,Aj) H,L′ j h,j j ξ
+(c¯ ,B¯ ,A¯ ) is the closet point to (c ,B ,A ) in this set w.r.t. ∥·∥ norm, and (π¯ ,...,π¯ ) ∈ Γ
+j h,j j j h,j j 2 1 H ξ
+32
+--- PAGE 33 ---
+such that (π¯ ,...,π¯ ) is the closet point to (π ,...,π ) in this set (also w.r.t. ∥·∥ norm). We
+1 H 1 H 2
+consider two mixing measures:
+H L H L
+(cid:88) (cid:88) (cid:88) (cid:88)
+G˜ := π exp(c¯ )δ , G¯ = π¯ exp(c¯)δ .
+h j (B¯
+h,j
+,A¯ j) h j (B¯
+h,j
+,A¯ j)
+h=1 j=1 h=1 j=1
+For the sake of presentation, we denote
+L
+(cid:88)
+g (X) := Softmax(X⊤(P0 +σ (B∗ )σ (A∗))P0 X +c∗)·(P0 +σ (B∗ )σ (A∗))X,
+h Q,h 2 h,j 1 j K,h j V,h 2 h,j 1 j
+l=1
+L
+(cid:88)
+g˜ (X) := Softmax(X⊤(P0 +σ (B∗ )σ (A∗))P0 X +c∗)·(P0 +σ (B¯∗ )σ (A¯∗))X
+h Q,h 2 h,j 1 j K,h j V,h 2 h,j 1 j
+l=1
+L
+(cid:88)
+g¯ (X) := Softmax(X⊤(P0 +σ (B¯∗ )σ (A¯∗))P0 X +c¯∗)·(P0 +σ (B¯∗ )σ (A¯∗))X,
+h Q,h 2 h,j 1 j K,h j V,h 2 h,j 1 j
+l=1
+for all h ∈ [H]. We provide an upper bound for the discrepancy ∥g −g ∥ as
+G G˜ ∞
+H H
+(cid:88) (cid:88)
+∥g −g ∥ ≤ π ∥g −g¯ ∥ ≤ ∥g −g¯ ∥
+G G˜ ∞ h h h ∞ h h ∞
+h=1 h=1
+H
+(cid:88)
+≤ (∥g −g˜ ∥ +∥g˜ −g¯ ∥ ) (28)
+h h ∞ h h ∞
+h=1
+For simplicity, denote K(X,B∗ ,A∗) := (P0 +σ (B∗ )σ (A∗))X. The discrepancy ∥g −g˜ ∥
+h,j j V,h 2 h,j 1 j h h ∞
+can be estimated as
+L
+(cid:88)
+∥g −g˜ ∥ ≤ sup |Softmax(X⊤(P0 +σ (B∗ )σ (A∗))P0 X +c∗)|·|K(B∗ ,A∗)−K(B¯∗ ,A¯∗)|
+h h ∞ Q,h 2 h,j 1 j K,h j h,j j h,j j
+X∈X
+l=1
+L
+(cid:88)
+≤ sup |K(X,B∗ ,A∗)−K(X,B¯∗ ,A¯∗)|
+h,j j h,j j
+X∈X
+l=1
+L
+(cid:88)
+≤ sup |(σ (B∗ )σ (A∗)X −σ (B¯∗ )σ (A¯∗))X|
+2 h,j 1 j 2 h,j 1 j
+X∈X
+l=1
+L
+(cid:88)
+≲ sup(∥(B∗ ,A∗)−(B¯∗ ,A¯∗)∥·∥X∥)
+h,j j h,j j
+X∈X
+l=1
+L
+(cid:88)
+≲ ξ·B ≲ ξ, (29)
+l=1
+where the second last inequality holds due to the fact that the input space is bounded: ∥X∥ ≤ B
+for all X ∈ X.
+33
+--- PAGE 34 ---
+Forthesecondterm∥g˜ −g¯ ∥ ,denoteM(X,B∗ ,A∗,c∗) := X⊤(P0 +σ (B∗ )σ (A∗))P0 X+
+h h ∞ h,j j j Q,h 2 h,j 1 j K,h
+c∗, we bound it using the following argument:
+j
+L
+∥g˜ h −g¯ h ∥ ∞ ≤ (cid:88) sup (cid:12) (cid:12)Softmax(M(X,B h ∗ ,j ,A∗ j ))−Softmax(M(X,B¯ h ∗ ,j ,A¯∗ j )) (cid:12) (cid:12)· (cid:12) (cid:12)K(X,B h ∗ ,j ,A∗ j ) (cid:12) (cid:12)
+X∈X
+l=1
+L
+≲ (cid:88) sup (cid:12) (cid:12)Softmax(M(X,B∗ ,A∗))−Softmax(M(X,B¯∗ ,A¯∗)) (cid:12) (cid:12)
+h,j j h,j j
+l=1
+L
+(cid:88)
+≲ ∥(B¯∗ ,A¯∗)−(B∗ ,A∗)∥
+h,j j h,j j
+l=1
+L
+(cid:88)
+≲ ξ ≲ ξ, (30)
+l=1
+given that the X belongs to a compact space X. Thus, the Eq. (28), Eq. (30), and Eq. (29) implies
+that ∥g −g ∥ ≲ ξ. In addition, we similarly can bound ∥g −g ∥ using the following step:
+G G¯ ∞ G˜ G¯ ∞
+H
+(cid:88)
+∥g −g ∥ ≤ |π −π¯ |·∥g ∥
+G˜ G¯ ∞ h h h
+h=1
+H
+(cid:88)
+≲ M ·|π −π¯ | ≲ ξ,
+h h
+h=1
+where the second last inequality follows from the fact that the input spaces are compact, which
+means |g (X)| ≤ M for X ∈ X.
+h
+As a result, from the triangle inequality, we have
+∥g −g ∥ ≤ ∥g −g ∥ +∥g −g ∥ ≲ ξ.
+G G¯ ∞ G G˜ ∞ G˜ G¯ ∞
+Thus, noting that the Gaussian density function f(x) = (2πσ2)−d/2exp (cid:0) −∥x∥2/2σ2(cid:1) is a global
+Lipschitz function, we have
+∥p(Y|g (X),σ2Id)−p(Y|g (X),σ2Id)∥ ≲ ∥g (X)−g (X)∥ ≲ ξ.
+G G¯ 1 G G¯ ∞
+From the definition of covering number, we get
+logN(η,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) ≤ |Γ
+ξ
+|×|∆
+ξ
+| ≤ O(ξ−(H−1))×O(ξ−2rdHL∗ ). (31)
+From Eq. (30) and Eq. (31), we have
+H
+B
+(ξ,P
+H,L′
+(Θ(cid:101)),∥·∥
+1
+) ≲ log(1/ξ).
+By choosing ξ = ϵ/2, we achieve that
+H
+B
+(ϵ,P
+H,L′
+(Θ(cid:101)),d
+H
+) ≲ log(1/ϵ).
+This completes our proof.
+34
+--- PAGE 35 ---
+C Additional Experimental Details
+C.1 Implementation Details
+For vision tasks, we conduct experiments on ViT-B/16 ([48]) for 100 epochs. The training configura-
+tion includes 100 warmup steps, a total batch size of 64, a Low-Rank Matrix rank of 8, and an alpha
+value of 8. We optimize the model using the AdamW optimizer with a cosine learning rate scheduler.
+To select learning rate and weight decay hyperparameters, we perform a grid search over the learning
+rate in {0.001,0.005,0.01,0.05,0.1} and the weight decay in {0.0001,0.0005,0.001,0.01,0.1}. For
+the hypernetwork used in low-rank matrix B, the input dimension is 64, the hidden dimension is 16,
+and the activation function is leaky-relu.
+For the commonsense reasoning tasks, we conduct experiments on two LLaMA versions, LLaMA-
+7B with 32 Transformer layers and LLaMA-13B with 40 Transformer layers [44]. The training
+configuration includes a warmup steps of 100, a total batch size of 32, a learning rate of 2e-4, and
+a dropout value of 0.05. The models are trained with 1 A100-GPUs for 3 epochs. The rank of
+Low-Rank Matrix is 32 and the alpha value is 64. We optimize the models using AdamW optimizer
+withalinearlearningratescheduler. InbothLLaMA-7BandLLaMA-13Bsettings, thehypernetwork
+used in low-rank matrix B has input dimension of 64 and hidden dimension of 40, while the activation
+function is leaky-relu.
+C.2 Detail of Sample Efficiency
+We provide in Figure 3 and 4 the detail of the sample efficiency problem in each commonsense
+reasoning dataset with LLaMA-7B setting and LLaMA-13B setting. From these figures, we observe
+that HyRA yield clear sample-efficiency improvements over LoRA on both 7B and 13B scales.
+C.3 Detail of results on VTAB-1K datasets
+In Table 4, we provide the results of HyRA in detail for each dataset in the VTAB-1K domain.
+Compared to LoRA, HyRA consistently outperforms by 1-6% percents on almost all datasets except
+for sNORB-ele with only a modest increase in the number of parameters, therefore suggesting the
+effectiveness of having shared information among the attention heads.
+Table 4: Classification accuracy on the VTAB-1K dataset
+Natural Specialized Structured
+Method
+001RAFIC 101hcetlaC
+DTD
+201rewolF
+steP
+NHVS 793nuS noylemaC TASoruE 54csiseR yhtaponiteR tnuoC-rvelC tsiD-rvelC baLMD ITTIK coL-rpSd iro-rpSd
+mizA-BRONs
+elE-BRONs
+AVG
+FFT 68.9 87.7 64.3 97.2 86.9 87.4 38.8 79.7 95.7 84.2 73.9 56.3 58.6 41.7 65.5 57.5 46.7 25.7 29.1 65.6
+LoRA 67.1 91.4 69.4 98.2 90.4 85.3 54 84.9 95.3 84.4 73.6 82.9 69.2 49.8 78.5 75.7 47.1 31 44 72.2
+DoRA 67.9 90.4 70.6 99 90.2 89.6 54.6 83.9 95.5 85.3 75.9 80.8 69.8 50.5 80.9 79.1 47.7 32.5 39.6 72.8
+VeRA 61.1 89.1 70.1 99.1 89.1 88.7 53.9 81.7 96.2 84.9 75.5 71.7 57.4 46.6 74.4 66.9 47.3 23.6 30.6 68.8
+Adapter 69.2 90.1 68 98.8 89.9 82.8 54.3 84 94.9 81.9 75.5 80.9 65.3 48.6 78.3 74.8 48.5 29.9 41.6 71.4
+Prefix 75.5 90.7 65.4 96.6 86 78.5 46.7 79.5 95.1 80.6 74 69.9 58.2 40.9 69.5 72.4 46.8 23.9 34.4 67.6
+HyRA 70.7 92.9 72.2 99.2 91.8 89.8 55.1 86.4 96.2 87.7 76.4 83.5 70.5 55 82.6 78.2 48.5 35 41.9 74.4
+C.4 Ablation on Low-Rank Matrices in Query, Value, Up, and Down Projections
+In addition to applying low-rank matrices to the query and value matrices in each layer, we further
+investigate whether our design on LoRA can generalize to scenarios where low-rank matrices are
+35
+--- PAGE 36 ---
+Figure 3: The detail of sample efficiency on each commonsense reasoning dataset with LLaMA-7B
+settings.
+also incorporated into additional modules. Specifically, we extend our method to the proj_up and
+proj_down matrices, where the query and value matrices still follow our proposed design, while the
+proj_up and proj_down use the original version of low-rank matrices. As shown in Table 5, HyRA
+consistently achieves the highest performance compared to LoRA and DoRA in the LLaMA-13B
+setting, improving over LoRA and DoRA by an average of 1.5% and 0.4%, respectively. This
+demonstrates that our proposed method, when applied to the query and value matrices in multi-head
+attention layers, remains effective even when low-rank matrices are additionally applied to other
+modules in the model.
+Table 5: Ablation Study on Low-Rank Matrices in Query, Value, Up, and Down Weights.
+Model Method #Params(%) BoolQ PIQA SIQA HellaSwag WinoGrande ARC-e ARC-c OBQA Average
+LoRA 0.57 72.11 83.73 80.5 90.5 83.74 82.11 68.09 82.4 80.4
+LLaMA-13B DoRA 0.58 72.42 84.98 81.17 91.81 84.61 84.22 69.88 82.8 81.49
+HyRA 0.57 72.23 85.8 80.25 92.47 84.37 84.47 70.99 84.4 81.87
+36
+--- PAGE 37 ---
+Figure 4: The detail of sample efficiency on each commonsense reasoning dataset with LLaMA-13B
+settings.
+C.5 Convergence curves, ratio of learnable parameters, runtime, and FLOPs
+comparisons
+In the main experiments, we have reported the ratio of learnable parameters compare the computa-
+tional cost across PEFT methods. For completeness, we further provide a comparison of FLOPs and
+runtimes for low-rank-based approaches, including LoRA, DoRA, and HyRA, in Table 6. During
+training, although HyRA incorporates additional hypernetwork modules that increase FLOPs, its
+runtimes and parameter ratios remain largely similar to those of LoRA. Meanwhile, HyRA achieves
+notable accuracy gains (up to +2.5% on the LLaMA-7B commonsense reasoning task) compared to
+LoRA. Moreover, at inference, since the low-rank matrices are merged into the pre-trained model,
+LoRA and HyRA have identical FLOPs and runtimes, making HyRA a practical and efficient
+approach for PEFT.
+37
+--- PAGE 38 ---
+Table 6: Comparison among LoRA, DoRA, and HyRA on LLaMA-7B and LLaMA-13B settings
+Model Method #Params. (%) GFLOPs Runtimes Performance
+LoRA 0.25 6.63 4.17 74.09
+LLaMA-7B DoRA 0.25 25.42 5.22 74.94
+HyRA 0.28 41.32 4.21 76.64
+LoRA 0.2 12.88 7.25 80.18
+LLaMA-13B DoRA 0.2 49.58 7.37 80.05
+HyRA 0.21 80.51 7.33 80.82
+We also compare the validation loss curves of LoRA and HyRA on the LLaMA-13B setting, as shown
+in Figure 5. Across most of the training period, HyRA exhibits consistently lower validation loss
+than LoRA, indicating improved convergence behavior.
+Figure 5: Validation loss curves comparing LoRA and HyRA on LLaMA-13B.
+D Use of Large Language Models
+In this paper, we use large language models (LLMs) solely for editorial support, including grammar
+refinement and spelling enhancements. We do not use LLMs for content generation, data analysis,
+or experimental design.
+References
+[1] A. Agiza, M. Neseem, and S. Reda. MTLoRA: Low-Rank Adaptation Approach for Efficient
+Multi-Task Learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition (CVPR), 2024. (Cited on pages 2 and 14.)
+[2] D. Bahdanau, K. Cho, and Y. Bengio. Neural Machine Translation by Jointly Learning to
+Align and Translate. CoRR, abs/1409.0473, 2014.
+(Cited on page 14.)
+38
+--- PAGE 39 ---
+[3] J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei. ImageNet: A Large-Scale
+Hierarchical Image Database. In 2009 IEEE Conference on Computer Vision and Pattern
+Recognition, pages 248–255, 2009.
+(Cited on page 11.)
+[4] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova. BERT: Pre-training of Deep Bidirectional
+Transformers for Language Understanding. In North American Chapter of the Association for
+Computational Linguistics, 2019. (Cited on page 14.)
+[5] N. T. Diep, H. Nguyen, C. Nguyen, M. Le, D. M. H. Nguyen, D. Sonntag, M. Niepert, and
+N. Ho. On Zero-Initialized Attention: Optimal Prompt and Gating Factor Estimation. In
+Forty-second International Conference on Machine Learning, 2025. (Cited on page 6.)
+[6] F. Ding, C. Xu, H. Liu, B. Zhou, and H. Zhou. Bridging Pre-Trained Models to Continual
+Learning: A Hypernetwork-Based Framework with Parameter-Efficient Fine-Tuning Techniques.
+Information Sciences, 674:120710, 2024. (Cited on page 15.)
+[7] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani,
+M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby. An Image is Worth 16x16
+Words: Transformers for Image Recognition at Scale. In International Conference on Learning
+Representations, 2021.
+(Cited on pages 4, 11, and 14.)
+[8] N. Du, Y. Huang, A. M. Dai, S. Tong, D. Lepikhin, Y. Xu, M. Krikun, Y. Zhou, A. W. Yu,
+O. Firat, B. Zoph, L. Fedus, M. P. Bosma, Z. Zhou, T. Wang, E. Wang, K. Webster, M. Pellat,
+K. Robinson, K. Meier-Hellstern, T. Duke, L. Dixon, K. Zhang, Q. Le, Y. Wu, Z. Chen, and
+C. Cui. GLaM: Efficient Scaling of Language Models with Mixture-of-Experts. In K. Chaudhuri,
+S. Jegelka, L. Song, C. Szepesvari, G. Niu, and S. Sabato, editors, Proceedings of the 39th
+International Conference on Machine Learning, volume 162 of Proceedings of Machine Learning
+Research, pages 5547–5569. PMLR, 17–23 Jul 2022.
+(Cited on page 15.)
+[9] S. d’Ascoli, H. Touvron, M. L. Leavitt, A. S. Morcos, G. Biroli, and L. Sagun. ConViT:
+Improving Vision Transformers with Soft Convolutional Inductive Biases. In International
+conference on machine learning, pages 2286–2296. PMLR, 2021. (Cited on page 12.)
+[10] D. Ha, A. M. Dai, and Q. V. Le. Hypernetworks. In International Conference on Learning
+Representations, 2017.
+(Cited on page 15.)
+[11] X. Han, H. Nguyen, C. Harris, N. Ho, and S. Saria. FuseMoE: Mixture-of-Experts Transformers
+for Fleximodal Fusion. In Advances in Neural Information Processing Systems, 2024. (Cited on
+page 15.)
+[12] J. He, C. Zhou, X. Ma, T. Berg-Kirkpatrick, and G. Neubig. Towards a Unified View of
+Parameter-EfficientTransferLearning. InInternational Conference on Learning Representations,
+2022.
+(Cited on page 14.)
+[13] N. Houlsby, A. Giurgiu, S. Jastrzebski, B. Morrone, Q. de Laroussilhe, A. Gesmundo, M. At-
+tariyan, and S. Gelly. Parameter-Efficient Transfer Learning for NLP. In Proceedings of the
+36th International Conference on Machine Learning (ICML), pages 2790–2799, 2019. (Cited on
+pages 1, 10, and 14.)
+39
+--- PAGE 40 ---
+[14] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen. LoRA:
+Low-Rank Adaptation of Large Language Models. In Proceedings of the 10th International
+Conference on Learning Representations (ICLR), 2022. (Cited on pages 2, 4, 10, and 14.)
+[15] Z. Hu, L. Wang, Y. Lan, W. Xu, E.-P. Lim, L. Bing, X. Xu, S. Poria, and R. Lee. LLM-
+Adapters: An Adapter Family for Parameter-Efficient Fine-Tuning of Large Language Models.
+In H. Bouamor, J. Pino, and K. Bali, editors, Proceedings of the 2023 Conference on Empirical
+Methods in Natural Language Processing, pages 5254–5276, Singapore, Dec. 2023. Association
+for Computational Linguistics.
+(Cited on page 12.)
+[16] M. Huan and J. Shun. Fine-Tuning Transformers Efficiently: A Survey on LoRA and its Impact.
+Preprints, February 2025.
+(Cited on page 14.)
+[17] R. A. Jacobs, M. I. Jordan, S. J. Nowlan, and G. E. Hinton. Adaptive Mixtures of Local Experts.
+Neural Computation, 3, 1991. (Cited on pages 4 and 15.)
+[18] M. Jia, L. Tang, B.-C. Chen, C. Cardie, S. Belongie, B. Hariharan, and S.-N. Lim. Visual
+Prompt Tuning. In European Conference on Computer Vision (ECCV), 2022. (Cited on page 1.)
+[19] M. I. Jordan and R. A. Jacobs. Hierarchical Mixtures of Experts and the EM Algorithm. Neural
+computation, 6(2):181–214, 1994.
+(Cited on pages 5 and 15.)
+[20] R.KarimiMahabadi,J.Henderson,andS.Ruder.Compacter: EfficientLow-RankHypercomplex
+Adapter Layers. In M. Ranzato, A. Beygelzimer, Y. Dauphin, P. Liang, and J. W. Vaughan,
+editors, Advances in Neural Information Processing Systems, volume 34, pages 1022–1035.
+Curran Associates, Inc., 2021.
+(Cited on page 1.)
+[21] N. Kitaev, L. Kaiser, and A. Levskaya. Reformer: The Efficient Transformer. In International
+Conference on Learning Representations, 2020. (Cited on page 14.)
+[22] D. J. Kopiczko, T. Blankevoort, and Y. M. Asano. VeRA: Vector-based Random Matrix
+Adaptation. In The Twelfth International Conference on Learning Representations, 2024. (Cited
+on page 14.)
+[23] M. Le, A. Nguyen, H. Nguyen, T. Nguyen, T. Pham, L. Van-Ngo, and N. Ho. Mixture of
+Experts Meets Prompt-Based Continual Learning. Advances in Neural Information Processing
+Systems, 38, 2024.
+(Cited on page 15.)
+[24] M. Le, C. Nguyen, H. Nguyen, Q. Tran, T. Le, and N. Ho. Revisiting Prefix-tuning: Statistical
+Benefits of Reparameterization among Prompts. In The Thirteenth International Conference on
+Learning Representations, 2025. (Cited on pages 3 and 6.)
+[25] B. Lester, R. Al-Rfou, and N. Constant. The Power of Scale for Parameter-Efficient Prompt
+Tuning. In M.-F. Moens, X. Huang, L. Specia, and S. W.-t. Yih, editors, Proceedings of the 2021
+Conference on Empirical Methods in Natural Language Processing, pages 3045–3059, Online and
+Punta Cana, Dominican Republic, Nov. 2021. Association for Computational Linguistics.
+(Cited
+on page 14.)
+40
+--- PAGE 41 ---
+[26] X. L. Li and P. Liang. Prefix-Tuning: Optimizing Continuous Prompts for Generation. In
+C. Zong, F. Xia, W. Li, and R. Navigli, editors, Proceedings of the 59th Annual Meeting of
+the Association for Computational Linguistics and the 11th International Joint Conference on
+Natural Language Processing (Volume 1: Long Papers), Online, Aug. 2021. Association for
+Computational Linguistics.
+(Cited on pages 1, 10, and 15.)
+[27] V. Lialin, S. Muckatira, N. Shivagunde, and A. Rumshisky. ReLoRA: High-Rank Training
+Through Low-Rank Updates. In The Twelfth International Conference on Learning Representa-
+tions, 2024.
+(Cited on page 14.)
+[28] S.-Y. Liu, C.-Y. Wang, H. Yin, P. Molchanov, Y.-C. F. Wang, K.-T. Cheng, and M.-H.
+Chen. DoRA: Weight-Decomposed Low-Rank Adaptation. In R. Salakhutdinov, Z. Kolter,
+K. Heller, A. Weller, N. Oliver, J. Scarlett, and F. Berkenkamp, editors, Proceedings of the 41st
+International Conference on Machine Learning, volume 235 of Proceedings of Machine Learning
+Research, pages 32100–32121. PMLR, 21–27 Jul 2024.
+(Cited on pages 10 and 14.)
+[29] X. Liu, K. Ji, Y. Fu, W. Tam, Z. Du, Z. Yang, and J. Tang. P-Tuning: Prompt Tuning
+Can Be Comparable to Fine-tuning Across Scales and Tasks. In S. Muresan, P. Nakov,
+and A. Villavicencio, editors, Proceedings of the 60th Annual Meeting of the Association for
+Computational Linguistics (Volume 2: Short Papers), pages 61–68, Dublin, Ireland, May 2022.
+Association for Computational Linguistics.
+(Cited on page 1.)
+[30] R. K. Mahabadi, S. Ruder, M. Dehghani, and J. Henderson. Parameter-efficient Multi-task
+Fine-tuning for Transformers via Shared Hypernetworks. In Annual Meeting of the Association
+for Computational Linguistics, 2021. (Cited on page 15.)
+[31] T. Manole and N. Ho. Refined Convergence Rates for Maximum Likelihood Estimation under
+FiniteMixtureModels. InProceedings of the 39th International Conference on Machine Learning,
+volume 162 of Proceedings of Machine Learning Research, pages 14979–15006. PMLR, 17–23
+Jul 2022.
+(Cited on page 7.)
+[32] Y. Mao, Y. Ge, Y. Fan, W. Xu, Y. Mi, Z. Hu, and Y. Gao. A Survey on LoRA of Large
+Language Models. Frontiers of Computer Science, 19(7):197605, 2025. (Cited on page 2.)
+[33] P. Michel, O. Levy, and G. Neubig. Are Sixteen Heads Really Better than One? In H. Wallach,
+H. Larochelle, A. Beygelzimer, F. d'Alché-Buc, E. Fox, and R. Garnett, editors, Advances in
+Neural Information Processing Systems, volume 32. Curran Associates, Inc., 2019. (Cited on
+page 2.)
+[34] H. Nguyen, P. Akbarian, and N. Ho. Is Temperature Sample Efficient for Softmax Gaussian
+Mixture of Experts? In Proceedings of the ICML, 2024. (Cited on page 15.)
+[35] H. Nguyen, P. Akbarian, F. Yan, and N. Ho. Statistical Perspective of Top-K Sparse Softmax
+Gating Mixture of Experts. In International Conference on Learning Representations, 2024.
+(Cited on page 15.)
+[36] H. Nguyen, N. Ho, and A. Rinaldo. On Least Square Estimation in Softmax Gating Mixture of
+Experts. In Proceedings of the ICML, 2024. (Cited on page 8.)
+41
+--- PAGE 42 ---
+[37] H. Nguyen, T. Nguyen, and N. Ho. Demystifying Softmax Gating Function in Gaussian Mixture
+of Experts. Advances in Neural Information Processing Systems, 36:4624–4652, 2023. (Cited on
+page 15.)
+[38] J. J. G. Ortiz, J. Guttag, and A. V. Dalca. Magnitude Invariant Parametrizations Improve
+Hypernetwork Learning. In The Twelfth International Conference on Learning Representations,
+2024.
+(Cited on page 10.)
+[39] B. Peralta and A. Soto. Embedded Local Feature Selection within Mixture of Experts. Inf.
+Sci., 269:176–187, June 2014.
+(Cited on page 15.)
+[40] N.-Q. Pham, T. Truong, Q. Tran, T. M. Nguyen, D. Phung, and T. Le. Promoting Ensemble
+Diversity with Interactive Bayesian Distributional Robustness for Fine-tuning Foundation
+Models. In Forty-second International Conference on Machine Learning, 2025. (Cited on page 14.)
+[41] J. Puigcerver, C. R. Ruiz, B. Mustafa, and N. Houlsby. From Sparse to Soft Mixtures of Experts.
+In The Twelfth International Conference on Learning Representations, 2024. (Cited on page 15.)
+[42] A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, and I. Sutskever. Language Models are
+Unsupervised Multitask Learners. OpenAI, 2019.
+(Cited on page 14.)
+[43] N. Shazeer, A. Mirhoseini, K. Maziarz, A. Davis, Q. Le, G. Hinton, and J. Dean. Outrageously
+Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer. In International
+Conference on Learning Representations, 2017. (Cited on page 15.)
+[44] H.Touvron, T.Lavril, G.Izacard, X.Martinet, M.-A.Lachaux, T.Lacroix, B.Rozière, N.Goyal,
+E. Hambro, F. Azhar, A. Rodriguez, A. Joulin, E. Grave, and G. Lample. LLaMA: Open and
+Efficient Foundation Language Models, 2023.
+(Cited on pages 12 and 35.)
+[45] T. Truong, C. Nguyen, H. Nguyen, M. Le, T. Le, and N. Ho. RepLoRA: Reparameterizing
+Low-rank Adaptation via the Perspective of Mixture of Experts. In Forty-second International
+Conference on Machine Learning, 2025. (Cited on pages 3 and 15.)
+[46] T. Truong, Q. Tran, Q. Pham-Ngoc, N. Ho, D. Phung, and T. Le. Improving Generalization
+with Flat Hilbert Bayesian Inference. In Proceedings of the 42st International Conference on
+Machine Learning (ICML), Proceedings of Machine Learning Research, Vancouver, Canada,
+2025. PMLR.
+(Cited on page 14.)
+[47] S. van de Geer. Empirical processes in M-estimation. Cambridge University Press, 2000. (Cited
+on pages 7 and 30.)
+[48] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and
+I. Polosukhin. Attention is All you Need. In Advances in Neural Information Processing Systems,
+2017.
+(Cited on pages 4, 14, and 35.)
+[49] E. Voita, D. Talbot, F. Moiseev, R. Sennrich, and I. Titov. Analyzing Multi-Head Self-
+Attention: Specialized Heads Do the Heavy Lifting, the Rest Can Be Pruned. In A. Korhonen,
+D. Traum, and L. Màrquez, editors, Proceedings of the 57th Annual Meeting of the Association
+for Computational Linguistics, pages 5797–5808, Florence, Italy, July 2019. Association for
+Computational Linguistics.
+(Cited on page 2.)
+42
+--- PAGE 43 ---
+[50] J. von Oswald, C. Henning, B. F. Grewe, and J. Sacramento. Continual Learning with
+Hypernetworks. In International Conference on Learning Representations, 2020. (Cited on
+page 15.)
+[51] S. Wang, B. Z. Li, M. Khabsa, H. Fang, and H. Ma. Linformer: Self-Attention with Linear
+Complexity, 2020.
+(Cited on page 14.)
+[52] J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. Chi, Q. V. Le, and D. Zhou.
+Chain-of-Thought Prompting Elicits Reasoning in Large Language Models. In S. Koyejo,
+S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh, editors, Advances in Neural
+Information Processing Systems, volume 35, pages 24824–24837. Curran Associates, Inc., 2022.
+(Cited on page 14.)
+[53] M. Yang, J. Chen, J. Tao, Y. Zhang, J. Liu, J. Zhang, Q. Ma, H. Verma, R. Zhang, M. Zhou,
+I. King, and R. Ying. Low-Rank Adaptation for Foundation Models: A Comprehensive Review,
+2025.
+(Cited on pages 2 and 14.)
+[54] B. Yu. Assouad, Fano, and Le Cam. Festschrift for Lucien Le Cam, pages 423–435, 1997. (Cited
+on page 18.)
+[55] X. Zhai, J. Puigcerver, A. Kolesnikov, P. Ruyssen, C. Riquelme, M. Lucic, J. Djolonga, A. S.
+Pinto, M. Neumann, A. Dosovitskiy, L. Beyer, O. Bachem, M. Tschannen, M. Michalski,
+O. Bousquet, S. Gelly, and N. Houlsby. A Large-scale Study of Representation Learning with
+the Visual Task Adaptation Benchmark, 2020.
+(Cited on page 11.)
+[56] Q. Zhang, M. Chen, A. Bukharin, N. Karampatziakis, P. He, Y. Cheng, W. Chen, and T. Zhao.
+AdaLoRA: Adaptive Budget Allocation for Parameter-Efficient Fine-Tuning. In The Eleventh
+International Conference on Learning Representations, 2023. (Cited on page 14.)
+[57] W. Zhao, Y. Gao, S. A. Memon, B. Raj, and R. Singh. Hierarchical Routing Mixture of Experts.
+In 2020 25th International Conference on Pattern Recognition (ICPR), pages 7900–7906, 2021.
+(Cited on page 15.)
+[58] O. İrsoy and E. Alpaydın. Dropout Regularization in Hierarchical Mixture of Experts. Neuro-
+computing, 419:148–156, 2021.
+(Cited on page 15.)
+43

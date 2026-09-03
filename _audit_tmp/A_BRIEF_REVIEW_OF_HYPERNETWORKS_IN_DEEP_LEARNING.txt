@@ -1,0 +1,1043 @@
+
+--- PAGE 1 ---
+A BRIEF REVIEW OF HYPERNETWORKS IN DEEP LEARNING
+VinodKumarChauhan1∗, JiandongZhou1, PingLu1, SoheilaMolaei1 andDavidA.Clifton1,2
+1InstituteofBiomedicalEngineering,UniversityofOxford,OX37DQ,UK
+2Oxford-SuzhouInstituteofAdvancedResearch(OSCAR),Suzhou,China
+July16,2024
+ABSTRACT
+Hypernetworks,orhypernetsforshort,areneuralnetworksthatgenerateweightsforanotherneural
+network,knownasthetargetnetwork. Theyhaveemergedasapowerfuldeeplearningtechniquethat
+allowsforgreaterflexibility,adaptability,dynamism,fastertraining,informationsharing,andmodel
+compression. Hypernetshaveshownpromisingresultsinavarietyofdeeplearningproblems,includ-
+ingcontinuallearning,causalinference,transferlearning,weightpruning,uncertaintyquantification,
+zero-shotlearning,naturallanguageprocessing,andreinforcementlearning. Despitetheirsuccess
+acrossdifferentproblemsettings,thereiscurrentlynocomprehensivereviewavailabletoinform
+researchersaboutthelatestdevelopmentsandtoassistinutilizinghypernets. Tofillthisgap,we
+reviewtheprogressinhypernets. Wepresentanillustrativeexampleoftrainingdeepneuralnetworks
+usinghypernetsandproposecategorizinghypernetsbasedonfivedesigncriteria: inputs,outputs,
+variability of inputs and outputs, and the architecture of hypernets. We also review applications
+ofhypernetsacrossdifferentdeeplearningproblemsettings,followedbyadiscussionofgeneral
+scenarioswherehypernetscanbeeffectivelyemployed. Finally,wediscussthechallengesandfuture
+directionsthatremainunderexploredinthefieldofhypernets. Webelievethathypernetworkshave
+thepotentialtorevolutionizethefieldofdeeplearning. Theyofferanewwaytodesignandtrain
+neuralnetworks,andtheyhavethepotentialtoimprovetheperformanceofdeeplearningmodels
+onavarietyoftasks. Throughthisreview,weaimtoinspirefurtheradvancementsindeeplearning
+throughhypernetworks.
+Keywords Hypernetworks·Deeplearning·NeuralNetworks·Parametergeneration·Weightgeneration
+1 Introduction
+Deeplearninghasrevolutionizedthefieldofartificialintelligencebyenablingremarkableadvancementsinvarious
+domains,includingcomputervision[12],naturallanguageprocessing[18],causalinference[11],andreinforcement
+learning[35]. Standarddeepneuralnetworks(DNNs)haveproventobepowerfultoolsforlearningcomplexrepre-
+sentations from data. However, despite their success, standard DNNs remain restrictive in certain conditions. For
+example,onceaDNNistrained,itsweightsaswellasitsarchitecturearefixed[55,73],andanychangestoweights
+orarchitecturerequirere-trainingtheDNN.ThislackofadaptabilityanddynamismrestrictstheflexibilityofDNNs,
+makingthemlesssuitableforscenarioswheredynamicadjustmentsordataadaptivityarerequired[24,8]. DNNs
+generallyhavealargenumberofweightsandneedsubstantialamountsofdatatooptimizethoseweights[3]. This
+canbechallenginginsituationswherelargeamountsofdataarenotavailable. Forexample,inhealthcare,collecting
+sufficientdataforrarediseasescanbeparticularlydifficultduetothelimitednumberofpatientsavailableperyear[76].
+Finally,uncertaintyquantificationinDNNs’predictionsisessentialasitprovidesameasureofconfidence,enabling
+betterdecision-makinginhigh-stakesapplications[13]. Existinguncertaintyquantificationtechniqueshavelimitations,
+suchastheneedtotrainmultiplemodels[1],anduncertaintyquantificationisstillconsideredanopenproblem[32].
+Similarly,domainadaptation,domaingeneralization,adversarialdefence,neuralstyletransfer,andneuralarchitecture
+∗Accepted to Artificial Intelligence Review (Springer Nature). Corresponding author: Vinod Kumar Chauhan
+(vinod.kumar@eng.ox.ac.uk)
+4202
+luJ
+31
+]GL.sc[
+3v55960.6032:viXra
+--- PAGE 2 ---
+ABriefReviewofHypernetworksinDeepLearning
+searchareimportantproblemsthatremainunsolved,wherehypernetscanprovideeffectivesolutionsasdiscussedin
+Section4.
+Hypernetworks(orhypernetsinshort)haveemergedasapromisingarchitecturalparadigmtoenhancetheflexibility
+(throughdataadaptivityanddynamicarchitectures)andperformanceofDNNs.Hypernetsareaclassofneuralnetworks
+thatgeneratetheweights/parametersofanotherneuralnetworkcalledthetarget/main/primarynetwork,whereboth
+networksaretrainedinanend-to-enddifferentiablemanner[24]. HypernetscomplementexistingDNNsandprovide
+anewframeworktotrainDNNs,resultinginanewclassofDNNscalledHyperDNNs(pleaserefertoSection2for
+details). Thekeycharacteristicsandadvantagesofhypernetsthatofferapplicationsacrossdifferentproblemsettings
+arediscussedbelow.
+(a) Softweightsharing: HypernetworkscanbetrainedtogeneratetheweightsofmultipleDNNsforsolving
+relatedtasks[14,49]. Thisiscalledsoftweightsharingbecause,unlikehardweightsharingwhichinvolves
+sharedlayersamongtasks(e.g.,inmultitasking),differentDNNsaregeneratedbyacommonhypernetthrough
+taskconditioning. Thishelpsshareinformationamongtasksandcanbeusedfortransferlearningordynamic
+informationsharing[14].
+(b) Dynamicarchitectures: Hypernetworkscanbeusedtogeneratetheweightsofanetworkwithadynamic
+architecture,wherethenumberoflayersorthestructureofthenetworkchangesduringtrainingorinference.
+Thiscanbeparticularlyusefulfortaskswherethetargetnetworkstructureisnotknownattrainingtime[24].
+(c) Data-adaptiveDNNs: UnlikestandardDNNswhoseweightsarefixedatinferencetime,HyperDNNscan
+generateatargetnetworkcustomizedtotheneedsofthedata. Insuchcases,hypernetsareconditionedonthe
+inputdatatoadapttothedata[69].
+(d) Uncertaintyquantification: Hypernetscaneffectivelytrainuncertainty-awareDNNsbyleveragingtechniques
+likesamplingmultipleinputsfromthenoisedistribution[33]orincorporatingdropoutwithinthehypernets
+themselves[15]. Bygeneratingmultiplesetsofweightsforthemainnetwork,hypernetscreateanensemble
+ofmodels,eachwithdifferentparameterconfigurations. Thisensemble-basedapproachaidsinestimating
+uncertaintyinthemodelpredictions,acrucialaspectforsafety-criticalapplicationslikehealthcare,where
+havingameasureofconfidenceinpredictionsisessential.
+(e) Parameter efficiency: HyperDNNs, i.e., DNNs trained with hypernets, can have fewer weights than the
+correspondingstandardDNNs,resultinginweightcompression[81]. Thiscanbeparticularlyusefulwhen
+workingwithlimitedresources,limiteddata,orhigh-dimensionaldataandcanresultinfastertrainingthanthe
+correspondingDNN[45].
+Haet.al[24]coinedthetermhypernets(alsoreferredtoasmeta-networksormeta-models)andtrainedthetarget
+network and hypernet in an end-to-end differentiable way. However, the concept of learnable context-dependent
+weightswasdiscussedevenearlier,suchasfastweightsin[59,60]andHyperNEAT[68]. Ourdiscussiononhypernets
+focusesonneuralnetworksgeneratingweightsforthetargetneuralnetworkduetotheirpopularity,expressiveness,and
+flexibility[73,12]. Recently,hypernetshavegainedsignificantattentionandhaveproducedstate-of-the-art(SOTA)
+resultsacrossseveraldeeplearningproblems,includingensemblelearning[32],multitasking[71],neuralarchitecture
+search [80], continual learning [49], weight pruning [40], Bayesian neural networks [17], generative models [17],
+hyperparameteroptimization[41],informationsharing[14],adversarialdefence[69],andreinforcementlearning(RL)
+[54](pleaserefertoSection4formoredetails).
+Despitethesuccessofhypernetsacrossdifferentproblemsettings,tothebestofourknowledge,thereisnoreviewof
+hypernetstoguideresearchersaboutthedevelopmentsandtohelpinutilizinghypernets. Tofillthisgap,weprovidea
+briefreviewofhypernetsindeeplearning. WeillustratehypernetsusinganexampleanddifferentiateHyperDNNs
+fromDNNs(Section2). Tofacilitatebetterunderstandingandorganization,weproposeasystematiccategorizationof
+hypernetsbasedonfivedistinctdesigncriteria,resultingindifferentclassificationsthatconsiderfactorssuchas(i)input
+characteristics,(ii)outputcharacteristics,(iii)variabilityofinputs,(iv)variabilityofoutputs,and(v)thearchitecture
+ofhypernets(Section3). Furthermore,weofferacomprehensiveoverviewofthediverseapplicationsofhypernets
+indeeplearning, spanningvariousproblemsettings(Section4). Byexaminingreal-worldapplications, weaimto
+demonstratethepracticaladvantagesandpotentialimpactofhypernetworks. Additionally,wediscusssomescenarios
+andposedirectquestionstounderstandifwecanapplyhypernetstoagivenproblem(Section5). Finally,wediscuss
+thechallengesandfuturedirectionsofhypernetresearch(Section6). Thisincludesaddressinginitialization,stability,
+andcomplexityconcerns,aswellasexploringavenuesforenhancingthetheoreticalunderstandinganduncertainty
+quantificationofDNNs. Byprovidingacomprehensivereviewofhypernetworks,thispaperaimstoserveasavaluable
+resourceforresearchersandpractitionersinthefield. Throughthisreview,wehopetoinspirefurtheradvancementsin
+deeplearningbyleveragingthepotentialofhypernetstodevelopmoreflexible,high-performingmodels.
+Contributions: Thisreviewpapermakesthefollowingkeycontributions:
+2
+--- PAGE 3 ---
+ABriefReviewofHypernetworksinDeepLearning
+• Tothebestofourknowledge, wepresentthefirstreviewonhypernetworksindeeplearning, whichhave
+shownimpressiveresultsacrossseveraldeeplearningproblems.
+• Weproposecategorizinghypernetsbasedonfivedesigncriteria,leadingtodifferentclassificationsofhypernets,
+suchasbasedoninputs,outputs,variabilityofinputsandoutputs,andarchitectureofhypernets.
+• Wepresentacomprehensiveoverviewofapplicationsofhypernetworksacrossdifferentproblemsettings,such
+asuncertaintyquantification,continuallearning,causalinference,transferlearning,andfederatedlearning,
+andsummarizeourreview,asperourcategorization,inatable(Table2).
+• Weexplorebroadscenariosforhypernetapplications,drawingfromexistingusecasesandhypernetcharacter-
+istics. Thisexplorationaimstoequipresearcherswithactionableinsightsintowhentoleveragehypernetsin
+theirproblemsetting.
+• Finally,weidentifythechallengesandfuturedirectionsofhypernetworkresearch,includinginitialization,
+stability,scalability,andefficiencyconcerns,andtheneedfortheoreticalunderstandingandinterpretabilityof
+hypernetworks. Byhighlightingtheseareas,weaimtoinspirefurtheradvancementsinhypernetworksand
+provideguidanceforresearchersinterestedinaddressingthesechallenges.
+Therestofthepaperisorganizedasfollows: Section2providesacomprehensivebackgroundonhypernets,while
+Section3introducesanovelcategorizationschemeforhypernets. Thediverseapplicationsofhypernetsacrossvarious
+problemsarediscussedinSection4,followedbyanexplorationofspecificscenarioswherehypernetscanbeeffectively
+employedinSection5. AddressingchallengesanddelineatingfutureresearchdirectionsisthefocusofSection6,and
+finally,theconcludingremarksarediscussedinSection7.
+2 Background
+Inthissection,wediscussanddifferentiatetheworkingsofstandarddeepneuralnetworks(DNNs)andDNNstrained
+withhypernetworks,referredtoasHyperDNNs,usingagenericexample. Fig.1illustratesthestructuraldifferencesand
+gradientflowsinDNNsandHyperDNNs. BothsolvethesameproblemusingthesameDNNarchitectureatinference
+time. However, differences exist in their training processes, specifically in gradient flow and weight optimization,
+makinghypernetsanalternativewayoftrainingDNNs.
+Gradient flows
+Input Weight generation
+Forward pass Backward pass Weight generation
+Gradient flows
+Loss
+Loss
+(a) A standard DNN (b) A HyperDNN
+Figure 1: An overview of the architectures and gradient flows for a standard DNN F(X;Θ) and the same DNN
+implementedwithhypernets,referredtoasHyperDNNF(X;Θ) = F(X;H(C;Φ)). FortheDNN,gradientsflow
+throughtheDNN,andDNNweightsΘarelearnedduringtraining. FortheHyperDNN,gradientsflowthroughthe
+hypernet,andhypernetweightsΦarelearnedduringtrainingtoproduceDNNweightsΘasoutputs.
+LetusdenoteadatasetusingX,Y tosolveageneraltaskT,whereX isamatrixoffeaturesandY isavectorof
+labels,andx∈X denotesonedatapointandy ∈Y isthecorrespondinglabel. LetaDNNbedenotedasafunction
+F(X;Θ), where X denotes the inputs and Θ represents the weights of the DNN. During the forward pass, inputs
+x∈X passthroughthelayersofF toproducepredictionsyˆ∈Yˆ,whicharethenusedalongwithtruelabelsy ∈Y to
+calculateanobjectivefunctionthatmeasuresthediscrepancybetweenactualvaluesandthevaluespredictedbythe
+3
+--- PAGE 4 ---
+ABriefReviewofHypernetworksinDeepLearning
+modelusingalossfunctionL(Y,Yˆ). Duringthebackwardpass,DNNstypicallyusebackpropagationtopropagatethe
+errorbackwardsthroughthelayersandcalculategradientsofLwithrespecttoΘ. Optimizationalgorithms,suchas
+Adam[30],usethesegradientstoupdatetheweights. Attheendofthetraining,wereceiveoptimizedweightsΘthat
+areusedatinferencetimeintheDNNF(X;Θ)tomakepredictionswiththetestdataforsolvingtaskT. Thus,in
+standardDNNs,Θarethelearnableweights.
+HypernetsprovideanalternativewayoflearningweightsΘoftheDNNF(X;Θ)tosolvetaskT,whereΘarenot
+directlylearnedbutaregeneratedbyanotherneuralnetwork. Inthisframework,wesolvethesametaskusingthesame
+DNNarchitecturebutwithadifferenttrainingapproach. LetahypernetbedenotedasH(C;Φ)whichgeneratesthe
+task-specificweightsoftheDNNF(X;Θ),whereC isatask-specificcontextvectorthatactsasinputtoHandΦare
+weightsofthehypernetH. Thatis,Θ=H(C;Φ)whereΦaretheonlylearnableweightsintheoverallarchitecture.
+ThecontextvectorC canbegeneratedfromthedata[2], sampledfromanoisedistribution[33], orcorrespondto
+taskidentity/embedding[4]. Duringtheforwardpass,atask-specificcontextvectorC ispassedtothehypernetH
+whichgeneratesweightsΘfortheDNNF. Then,likeastandardDNN,aninputx∈X ispassedthroughtheDNN
+F to predict the output Y, and the loss is calculated as L(Y,Yˆ). However, during the backward pass, the error is
+backpropagatedthroughthehypernetHandgradientsofLarecalculatedwithrespecttotheweightsofthehypernet
+Φ. ThelearningalgorithmoptimizesΦtogenerateΘsothatperformanceonthetargettaskT isoptimized. Attest
+time,ΘgeneratedfromtheoptimizedhypernetHareusedintheDNNF(X;Θ)tomakepredictionswiththetestdata
+forsolvingtaskT. TheoptimizationproblemsforthestandardDNNandtheHyperDNNcanbewrittenasfollows
+(ignoringregularizationtermsforsimplicity):
+DNN: min F(X;Θ), HyperDNN: min F(X;Θ)=F(X;H(C;Φ)). (1)
+Θ Φ
+Thus,DNNslearntheirweights2directlyfromthedata,whileinHyperDNNstheweightsofthehypernetarelearned,
+and the weights of the DNN are generated by the hypernet. For a specific example of a comparison of DNN and
+HyperDNNarchitecturesandtheirworkings,pleaserefertoourworkincausalinference[14].
+AsdiscussedinSection1,trainingaDNNwithahypernet,i.e.,HyperDNNpresentsseveraladvantagesoverdirectly
+training a DNN. However, these advantages are application-specific and cannot be generalized across all tasks or
+applications. For instance, a key feature of hypernets is soft-weight sharing, which enables information sharing
+amongrelatedcomponents. Thisinformationsharingisparticularlyvaluableinsettingswithlimiteddata,leadingto
+performanceimprovementsforHyperDNNsinsuchscenarios. Ingeneral,HyperDNNsarebeneficialforapplications
+withlimiteddata,problemsrequiringdata-adaptivenetworks,dynamicnetworkarchitectures,parameterefficiency,and
+uncertaintyquantification. AdetaileddiscussionofscenarioswhereHyperDNNscanbeusefulisprovidedinSection5.
+Ingeneral,ifataskcanbesolvedusingstandardDNNs,itisadvisabletousetheminsteadofhypernets. Asdepictedin
+Figure1,HyperDNNsrequireanadditionalDNNtosolvethesametask. Despitetheadvantagesofferedbyhypernets,
+thisadditionalDNNintroducescomplexitiesintrainingandimplementingHyperDNNs. Forexample,theinitialization
+ofHyperDNNsismorechallengingthanDNNsbecausetheweightsofthetargetnetworkaregeneratedattheoutput
+layerofthehypernet. Classicalinitializationtechniquesdonotguaranteethattheweightsofthetargetnetworkare
+initializedwithinthesamerange. However,adaptiveoptimizers,suchasAdam[30],canmitigatethisissuetosome
+extent. AnothersignificantchallengewithHyperDNNsistheirscalability. Sincetheweightsofthetargetnetwork
+aregeneratedattheoutputlayerofthehypernet,thisapproachcanpresentdifficultieswhendealingwithlargetarget
+networks. Scalability issues can be managed using various weight generation strategies. Therefore, when using
+HyperDNNs,practitionersshouldconsideremployingadaptiveoptimizers,implementingdifferentweightgeneration
+strategies,andusingapproachestostabilizetraining,suchasspectralnorms. Foradetaileddiscussiononthechallenges
+associatedwithHyperDNNs,pleaserefertoSection6.
+3 CategorizationofHypernetworks
+Inthissection,weproposetocategorizethehypernetworksbasedonfivedesigncriteria,asdepictedinFig.2andas
+givenbelow:
+(a) Input-based, i.e., what kind of input is taken by the hypernetworks to generate the target neural network
+weights?
+(b) Output-based,i.e.,howaretheoutputs,thatis,thetargetweightsgenerated?
+(c) Variabilityofinputs,i.e.,aretheinputsofhypernetfixed?
+2wehaveusedweightsandparametersinterchangeably
+4
+--- PAGE 5 ---
+ABriefReviewofHypernetworksinDeepLearning
+(d) Variabilityofoutputs,i.e.,doesthetargetnetworkhaveafixednumberofweights? and
+(e) Architecture-based,i.e.,whatkindofarchitecturedoeshypernetusetogeneratethetargetweights?
+Wediscusstheseinthefollowingsubsections. Onecancategorizehypernetsbasedonthearchitectureofthetarget
+networkbutthatisnotconsideredbecausehypernetsmostlygeneratetargetweightsindependentoftheirarchitecture.
+Hypernetworks
+What kind of input is What kind of
+taken to generate the How are the target Are the inputs fixed? Are the target weights architecture is used for
+target weights? weights generated? fixed? Hypernetwork?
+Task-conditioned Generate Once Static Inputs Static Weights MLP
+Data-conditioned Generate Multiple Dynamic Inputs Dynamic Weights CNN
+Noise-conditioned Generate RNN
+Component-wise Dynamism
+Generate Attention
+Chunk-wise Static Hypernets Dynamic Hypernets
+Figure2: Proposedcategorizationofhypernetsbasedonfivedesigncriteria.
+3.1 Input-basedHypernetworks
+HypernetworkstakeacontextvectorasaninputandgenerateweightsofthetargetDNNasoutput. Dependingonwhat
+contextvectorisused,wecanhavethefollowingtypesofhypernetworks.
+Task-conditionedhypernetworks: Thesehypernetworkstaketask-specificinformationasinput. Thetaskinformation
+canbeintheformoftaskidentity/embedding,hyperparameters,architectures,oranyothertask-specificcues. The
+hypernetworkgeneratesweightsthataretailoredtothespecifictask. Thisallowsthehypernettoadaptitsbehavior
+accordinglyandallowsinformationsharing,throughsoftweightsharingofhypernets,amongthetasks,resultingin
+betterperformanceonthetasks.Forexample,Chauhanetal.[14]appliedhypernetstosolvetreatmenteffectsestimation
+problemincausalinferencethatusesanidentityorembeddingofpotentialoutcome(PO)functionstogenerateweights
+correspondingtothePOfunction. Thehypernetworksenableddynamicend-to-endinter-treatmentinformationsharing
+amongtreatmentgroupsandhelpedtocalculatereliabletreatmentestimatesinobservationalstudieswithlimited-size
+datasets. Similarly,task-conditionedhypernetshavebeenusedtosolveotherproblems,includingmultitasking[45],
+naturallanguageprocessing(NLP)[24],andcontinuallearning[49].
+Data-conditionedhypernetworks: Thesehypernetworksareconditionedonthedatathatthetargetnetworkisbeing
+trainedon. Thehypernetworkgeneratesweightsbasedonthecharacteristicsoftheinputdata. Thisenablestheneural
+networktodynamicallyadjustitsbehaviorbasedonthespecificinputpatternorfeatures,leadingtomoreflexibleand
+adaptivemodels,andresultinginbettergeneralizationtounseendata. Forexample,Alalufetal.[2]appliedhypernets
+forimageeditingwheretheinputofhypernetisbasedontheinputimagesandinitialapproximationofreconstruction
+togeneratemodulationstotheweightsofthepre-trainedgenerator. Similarly,data-conditionedhypernetshavebeen
+usedtosolveotherproblems,suchasadversarialdefence[69],knowledgegraphslearning[5]andshapelearning[39].
+Noise-conditionedhypernetworks: Thesehypernetworksarenotconditionedonanyinputdataortaskcues,butrather
+onrandomlysamplednoise. Thismakesthemmoregeneral-purposeandhelpsinpredictiveuncertaintyquantification
+forDNNs,butitalsomeansthattheymaynotperformaswellastask-conditionedordata-conditionedhypernetworks
+onmultipletasksordatasets.Forexample,Kruegeretal.[33]appliedhypernetworkstoapproximateBayesianinference
+intheDNNsandevaluatedtheapproachforactivelearning,modeluncertainty,regularization,andanomalydetection.
+Similarly,noise-conditionedhypernetshavebeenusedtosolveotherproblems,suchasmanifoldlearning[17]and
+uncertaintyquantification[53].
+Thesedifferenttypesofconditioningenablehypernetworkstoenhancetheflexibility(throughadaptabilityanddynamic
+architectures),andperformanceofdeeplearningmodelsinvariouscontexts. Thespecifictypeofhypernetworkthat
+is used will depend on the specific task or application. For example, task-conditioned hypernets are suitable for
+informationsharingamongmultipletasks,data-conditionedhypernetsaresuitabletodealwithconditionswhereDNN
+needtoadapttoinputdata,andnoise-conditionedhypernetsaresuitableforuncertaintyquantificationinthepredictions.
+5
+--- PAGE 6 ---
+ABriefReviewofHypernetworksinDeepLearning
+3.2 Output-basedHypernetworks
+Basedontheoutputsofhypernets,i.e.,weightgenerationstrategy,weclassifyhypernetworksaccordingtowhether
+allweightsaregeneratedtogetherornot. Thisclassificationofhypernetworksisimportantbecauseitcontrolsthe
+scalabilityandcomplexityofthehypernetworks,astypicallyDNNshavealargenumberofweights,andproducingall
+ofthemtogethercanmakethesizeofthelastlayerofhypernetslarge. So,therearewaystomanagethecomplexityof
+thehypernetsthatleadtodifferentstrategiesofweightgeneration,asdiscussedbelow. ItispossibletotrainHyperDNN
+with fewer weights than the target DNN – this is called weight compression [81]. We compared and summarized
+the characteristics of various weight generation strategies in Table 1. The first column represents the considered
+characteristic for comparison, while the following three columns correspond to three different weight generation
+strategies. Thevaluesineachrowindicatewhetheraparticularweightgenerationstrategyprovidesthespecifiedfeature
+ornot.
+GenerateOnce: ThesehypernetworksgenerateweightsoftheentiretargetDNNaltogether. Thisapproachusesall
+thegeneratedweights,andweightsofeachlayeraregeneratedtogether,unliketheotherweightgenerationstrategies.
+However,thisweightgenerationapproachisnotsuitableforlargetargetnetworksbecausethatcanleadtocomplex
+hypernets. For example, Shamsian et al. [63], Galanti andWolf [22], Zhang etal. [80] used generate onceweight
+generation.
+Generate Multiple: These hypernetworks have multiple heads for producing weights (sometimes referred to as
+split/multi-headhypernets)andthisweightgenerationapproachcancomplementtheotherapproaches. Thissimplifies
+thecomplexityandreducesthenumberofweightsrequiredinthelastlayerofthehypernetsbythenumberofhead
+times. This approach does not need additional embeddings, and in general, uses all the generated weights, unlike
+component-wiseandchunk-wiseweightgenerationapproacheswheresomeweightsremainunused. Forexample,Beck
+etal.[6],Rezaei-Shoshtarietal.[54],Chauhanetal.[14]usedgeneratemultiplestrategytoproducetargetweights.
+GenerateChunk-wise: Chunk-wisehypernetworksgenerateweightsofthetargetnetworkinchunks. Thiscanleadto
+notusingsomeofthegeneratedweightsbecausetheweightsaregeneratedasperthechunksize,whichmaynotmatch
+thelayersizes. Ifthechunksizeissmallerthanthelayersize,thenalltheweightsofalayermaynotbegenerated
+together. Moreover,thesehypernetsneedadditionalembeddingstodistinguishdifferentchunksandtoproducespecific
+weightsforthechunks. However,overallchunk-wiseweightgenerationleadstoreducingcomplexityandimproving
+thescalabilityofhypernets. Forexample,Chauhanetal.[14],Oswaldetal.[49]usedchunk-wiseweightgeneration.
+Generate Component-wise: Component-wise weights generation strategy generates weights for each individual
+component(suchaslayerorchannel)ofthetargetmodelseparately. Thisishelpfulingeneratingspecificweights
+becausedifferentlayersorchannelsrepresentdifferentfeaturesorpatternsinthenetwork. However,similartothe
+chunk-wiseapproach,component-wisehypernetsneedanembeddingforeachcomponenttodistinguishamongdifferent
+componentsandproduceweightsspecifictothatcomponent. Theyalsohelptoreducethecomplexityandimprovethe
+scalabilityofhypernets. Sincetheweightsaregeneratedasperthesizeofthelargestlayersothisweightgeneration
+approachcanleadtonotusingsomeofweightsinsmallerlayers. Thisstrategycanbeseenasaspecialcaseofa
+chunk-wiseweightgenerationapproach,whereonechunkisequaltothesizeofonecomponent. Forexample,Zhao
+etal.[81],Alalufetal.[2],Mahabadietal.[43]usedcomponent-wiseweightgeneration.
+Byclassifyinghypernetworksbasedontheirweightgenerationstrategy,wecanmakeinformedchoicesthatmayhelp
+controlthescalabilityandcomplexityofthehypernetworkseffectively. Eachtypeofweightgenerationstrategyoffers
+unique benefits and considerations based on the specific characteristics and requirements of the task at hand. The
+comparativestudyofcharacteristicsofdifferentweightgenerationapproachesissummarizedinTable1.
+3.3 VariabilityofInputs
+Wecancategorizehypernetsbasedonthevariabilityoftheinputs. Wehavetwoclasses,staticinputsanddynamic
+inputs,asdiscussedbelow.
+StaticInputs: Iftheinputsarepredefinedandarefixedthenthehypernetiscalledstaticwithrespecttotheinputs. For
+example,multitasking[43]hasfixednumberoftasksleadingtofixednumberofinputs. Itistobenotedthatherefixed
+inputonlymeansfixedtasksidentities,howeverhypernetscanlearnembeddingsfordifferenttasks.
+DynamicInputs: Iftheinputschangeandgenerallyaredependentondataonwhichthetargetnetworkistrained,
+thenthehypernetiscalleddynamicwithrespecttotheinputs. Dynamicinputshelphypernetworkstointroduceanew
+levelofadaptabilitybydynamicallygeneratingtheweightsofthetargetnetwork. Thisdynamicweightgeneration
+enableshypernetworkstorespondtoinput-dependentcontextandadjusttheirbehavioraccordingly. Bygenerating
+networkweightsbasedonspecificinputs,hypernetworkscancaptureintricatepatternsanddependenciesthatmayvary
+acrossdifferentinstancesofdata. Thisadaptabilityleadstoenhancedmodelperformance,especiallyinscenarioswith
+6
+--- PAGE 7 ---
+ABriefReviewofHypernetworksinDeepLearning
+Table1: Comparisonofdifferentweightgenerationstrategies,i.e.,output-basedhypernetworks.
+Weight-generation→ GenerateOnce Generate Generate Chunk- GenerateMultiple
+/Characteristics↓ Component-wise wise
+Weightgeneration Generates all tar- Generates target Generates target Complements all
+get weights to- weights for one weightsinchunks other weight genera-
+gether componentatatime tionstrategiessocan
+generateweightslike
+anyoftheother
+Efficient use of gener- Yes No as some weights Yes Dependsonthebase
+atedweights canstayunused strategy
+Are all weights of a Yes Yes No Dependsonthebase
+layergeneratedtogether strategy
+The complexity of out- Highest Lower than generate Lowest Can further improve
+putspace once Chunk-wise genera-
+tion
+Thecomplexityofinput Lowest More complex than Highest (assuming Doesnothaveanyef-
+space ‘generate once’ but thenumberofchunks fect on input space
+lower than chunk- is more than the complexity
+wisegenerationifthe number of target
+numberoftargetlay- layers)
+ers is fewer than the
+numberofchunks
+complexandevolvingdatadistributions[75]. Thus,dynamicinput-basedhypernetshelpindomainadaptation[75],
+densityestimation[28]andknowledgegraphlearning[5]etc.
+Thiscanbeseenasasupercategorizationoverinput-basedhypernetswheretask-conditionedhypernetsfallinthestatic
+inputscategorywhilerandom-noiseanddata-conditionedhypernetsfallinthedynamiccategory. Boththecategories
+havetheirownadvantagesasstaticinputshelpininformationsharing[14],transferlearning[49],andaresuitable
+wherewehavemultipletaskstosolve[63]. Ontheotherhand,dynamicinputsgivehypernetsadaptabilitytonew
+conditionsunknownduringtraining[5].
+3.4 VariabilityofOutputs
+Whenclassifyinghypernetworksbasedonthenatureofthetargetnetwork’sweights,wecancategorizethemintotwo
+types,staticoutputsordynamicoutputs,asdiscussedbelow.
+StaticOutputs: Ifweightsofthetargetnetworkarefixedinsize,thenthehypernetiscalledstaticwithrespecttothe
+outputs. Inthiscase,thetargetnetworkisalsostatic. Forexample,Panetal.[50],Szatkowskietal.[70]producestatic
+weights.
+DynamicOutputs: Ifweightsofthetargetnetworkarenotfixed,i.e.,thearchitecturevariesinsize,thenthehypernet
+iscalleddynamicwithrespecttotheoutputs,andthetargetnetworkisalsoadynamicnetworkasitcanhavedifferent
+architecturedependingontheinputofthehypernet. Thedynamicweightscanbegenerated,mainly,intwosituations,
+firstwhenthehypernetarchitectureisdynamic,e.g.,Haetal.[24]usedrecurrentneuralnetwork(RNN)topropose
+HyperRNNbasedonnon-sharedweights. Second,thedynamicweightscanbegeneratedwhentheinputsaredynamic,
+i.e.,hypernetadaptsaspertheinputdata,e.g.,LittwinandWolf[39]appliedconvolutionalneuralnetwork(CNN)
+basedhypernettogeneratedynamicweightsforshapelearningfromanimageofashape. Similarly,Pengetal.[51],Li
+etal.[36]alsoproducedynamicweights.
+3.5 DynamisminHypernetworks
+ThisisasupercategorizationofSubsection3.3and3.4intobroadercategorybasedonthedynamismininputsor
+outputsofthehypernets,asdiscussedbelow.
+StaticHypernets: Ifinputofahypernetisfixed,i.e.,predefinedandnumberofweightsproducedbyhypernetfor
+thetargetnetworkarefixed,i.e.,thearchitectureisfixed,thenthehypernetiscalledasastatichypernet. Thiskindof
+hypernetsworkwithpredefinedinputs,e.g.,taskidentities,whichcanbelearnedasembeddings,butthetasksbeing
+7
+--- PAGE 8 ---
+ABriefReviewofHypernetworksinDeepLearning
+solvedremainsame. Forexample,heterogeneoustreatmenteffectestimation[14]wherenumberoftreatmentgroupsor
+potentialoutcomefunctionsarefixed,andarchitectureofthetargetnetwork(inthiscasepotentialoutcomefunctions)
+isalsofixed.
+DynamicHypernets: Ifinputofahypernetisbasedoninputoftargetnetwork,i.e.,inputdata,ornumberofweights
+producedbyhypernetforthetargetnetworkarevariable,i.e.,thearchitectureisdynamic,thenthehypernetiscalled
+asadynamichypernet. Forexample,Senderaetal.[61]applieddata-conditionedhypernettofew-shotlearningby
+combiningkernelsandhypernets. Thekernelswereusedtoextractsupportinformationfromdataofdifferenttasks
+thatactasinputtothehypernetwhichgeneratesweightsforthetargettask. Zhangetal.[80]appliedhypernetworks
+forneuralarchitecturesearchwheretheymodeledneuralarchitecturesofaDNNasgraphandusedthemasinputto
+hypernettogeneratethetargetnetworkweights. So,thetargetnetworkhasvariablearchitecture,andisadynamic
+hypernetbasedonthedynamicoutputs.
+3.6 ArchitectureofHypernetworks
+In the categorization of hypernetworks based on their architectures, we can classify them into four major types:
+multi-layer perceptrons (MLPs), convolutional neural networks (CNNs), recurrent neural networks (RNNs), and
+attention-basednetworks,asgivenbelow.
+MLPs: MLPbasedhypernetworksemployadenseandfullyconnectedarchitecture,allowingeveryinputneuronto
+connectwitheveryoutputneuron. Thisarchitectureenablesacomprehensiveweightgenerationprocessbyconsidering
+theentireinputinformation,e.g.,[14].
+CNNs: CNNhypernetworks,ontheotherhand,leverageconvolutionallayerstocapturelocalpatternsandspatial
+information.Thesehypernetworksexcelintasksinvolvingspatialdata,suchasanimageorvideoanalysis,byextracting
+featuresfromtheinputandgeneratingweightsorparametersaccordingly,e.g.,Nirkinetal.[47]employedMLPto
+implementhypernets.
+RNNs: RNNhypernetworksincorporaterecurrentconnectionsintheirarchitecture,facilitatingfeedbackloopsand
+sequentialinformationprocessing. Theydynamicallygenerateweightsorparametersbasedonpreviousstatesorinputs,
+makingthemwell-suitedfortasksinvolvingsequentialdata,suchasnaturallanguageprocessingortimeseriesanalysis,
+e.g.,Haetal.[24]employedRNNtoimplementhypernets.
+AttentionAttention-basedhypernetworksincorporateattentionmechanisms[73]intotheirarchitecture. Byselectively
+focusingonrelevantinputfeatures,thesehypernetworksgenerateweightsforthetargetnetwork,allowingthemto
+capturelong-rangedependenciesandimprovethequalityofgeneratedoutputs,e.g.,Volketal.[75]employedattention
+toimplementhypernets.
+Eachtypeofarchitecturehasitsownstrengthsandapplicability,enablinghypernetworkstoadaptandgenerateweights
+inamannerthatalignswiththespecificcharacteristicsanddemandsofthetargetnetworkandthedatabeingprocessed.
+4 ApplicationsofHypernetworks
+Hypernetworks have demonstrated their effectiveness and versatility across a wide range of domains and tasks in
+deeplearning. Inthissection,wediscusssomeoftheimportantapplications3 ofhypernetworksandhighlighttheir
+contributionstoadvancingtheSOTAintheseareas. Wesummarizetheapplicationsofhypernetsasperourproposed
+categorization and also provide links to code repositories for the benefit of the researchers, wherever available, in
+Table2.
+Continual Learning: Continual learning, also known as lifelong learning or incremental learning, is a machine
+learningparadigmthatfocusesontheabilityofamodeltolearnandadaptcontinuouslyovertime,inasequential
+manner, withoutforgettingpreviouslylearnedknowledge. Unliketraditionalbatchlearning, whichassumesstatic
+andindependenttrainingandtestingsets,continuallearningdealswithdynamicandnon-stationarydatadistributions,
+wherenewdataarrivesincrementally,andthemodelneedstoadapttothesechangeswhileretainingpreviouslyacquired
+knowledge.Thechallengeincontinuallearningliesinmitigatingcatastrophicforgetting,whichreferstothetendencyof
+amodeltoforgetpreviouslylearnedinformationwhenitistrainedonnewdata. Toaddressthis,variousstrategieshave
+beenproposed,includingregularizationtechniques,rehearsalmethods,dynamicarchitectures,andparameterisolation.
+Oswaldetal.[49]modeledeachincrementallyobtaineddatasetasataskandappliedtask-conditionedhypernetsfor
+continuallearning–thishelpedtoshareinformationamongtasks. Toaddressthecatastrophicforgettingissue,they
+3Wehaveexplored50importantpapers(arrangedbypublicationyear)whileconsideringatleastoneapplicationineachdistinct
+problemsetting.Thisisnotanexhaustivelistanditispossiblethatwemayhavemissedimportantreferences.
+8
+--- PAGE 9 ---
+ABriefReviewofHypernetworksinDeepLearning
+proposedaregularizerforrehearsingtask-specificweightrealizationsratherthanthedatafromprevioustasks. They
+achievedSOTAresultsonbenchmarksandempiricallyshowedthatthetask-conditionedhypernetshavealongcapacity
+toretainmemoriesofprevioustasks. Similarly,Huangetal.[29],Ehretetal.[20]appliedtask-conditionedhypernets
+tocontinuallearninginreinforcementlearning(RL).
+FederatedLearning: FederatedLearningisadecentralizedapproachtomachinelearningwherethetrainingprocess
+isdistributedacrossmultipledevicesoredgedevices,withouttheneedtocentralizedatainasinglelocation. Inthis
+paradigm, each device or edge node locally trains a model using its own data, and only the model updates, rather
+thantherawdata,aresharedandaggregatedonacentralserver. Thisenablescollaborativelearningwhilepreserving
+data privacy and security. It also reduces communication costs and latency, making it suitable for scenarios with
+limitedbandwidthorintermittentconnectivity. Shamsianetal.[63]modeledeachclientmachineasataskandapplied
+task-conditionedhypernetstofederatedlearningproblem. Theytrainedacentralhypernettogeneratetheweightsfor
+theclientmodels. Thisallowedinformationsharingacrossdifferentclientswhilemakingthehypernetsizeindependent
+ofcommunicationcost,ashypernetweightsarenevertransmitted. Thehypernet-basedfederatedlearningachievedthe
+SOTAresultsandalsoshowedbettergeneralizationtonewclientswhosedistributionsweredifferentthantheexisting
+clients. Litanyetal.[37]extendedthisworktoheterogeneousclients,i.e.,clientswithdifferentneuralarchitectures,
+usinggraphhypernetworks[80].
+Table2:Importantapplicationsofhypernetworks,arrangedbyascendingpublicationyear,andtheircategorizationbasedonInput:(i)task-conditioned,(ii)noise-
+conditioned,and(iii)data-conditioned;output,i.e.,weightgeneration:(i)generateonce,(ii)generatecomponent-wise,(iii)generatechunk-wise,and(iv)generate
+multiple;Inputvariability:(i)staticinputs,and(ii)dynamicinputs;Outputvariability:(i)staticweights,and(ii)dynamicweights;andarchitectureofhypernets(SN:
+SerialNumber,Ref.:Reference,DL:DeepLearning,RL:Reinforcementlearning).
+Input Output InputVar. OutVar.
+SN Ref. DLProblem Architecture Code
+(i) (ii) (iii) (i) (ii) (iii) (iv) (i) (ii) (i) (ii)
+1 [24] Imageclassification,NLP ✓ ✓ ✓ ✓ ✓ RNN,MLP
+2 [33] Uncertaintyquantification ✓ ✓ ✓ ✓ MLP
+3 [69] Adversarialdefence ✓ ✓ ✓ ✓ MLP
+4 [41] Hyperparameteroptimization ✓ ✓ ✓ ✓ MLP
+5 [8] Neuralarchitecturesearch ✓ ✓ ✓ ✓ CNN Link
+6 [50] Spatio-temporallearning ✓ ✓ ✓ ✓ MLP, RNN,
+CNN
+7 [80] Neuralarchitecturesearch ✓ ✓ ✓ ✓ MLP
+8 [17] Manifoldlearning ✓ ✓ ✓ ✓ CNN
+9 [53] Uncertaintyquantification ✓ ✓ ✓ ✓ ✓ GAN
+10 [40] Weightpruning ✓ ✓ ✓ ✓ MLP Link
+11 [5] Knowledgegraphslearning ✓ ✓ ✓ ✓ MLP Link
+12 [39] Shapelearning ✓ ✓ ✓ ✓ CNN Link
+13 [32] Uncertaintyquantification ✓ ✓ ✓ ✓ MLP
+14 [31] Imageprocessing ✓ ✓ ✓ ✓ CNN
+15 [49] Continual learning, transfer ✓ ✓ ✓ ✓ ✓ ✓ MLP Link
+learning
+16 [81] Few-shotlearning ✓ ✓ ✓ ✓ MLP
+17 [22] ComplexityofNN ✓ ✓ ✓ ✓ MLP
+18 [36] Weightpruning ✓ ✓ ✓ ✓ MLP Link
+19 [51] Neuralarchitecturesearch ✓ ✓ ✓ ✓ CNN Link
+20 [45] Pareto-FrontLearning(multi- ✓ ✓ ✓ ✓ MLP Link
+tasking, fairness, image seg-
+mentation)
+21 [63] FederatedLearning ✓ ✓ ✓ ✓ MLP Link
+22 [47] Semanticsegmentation ✓ ✓ ✓ ✓ ✓ CNN Link
+23 [43] Multitasking, NLP, language ✓ ✓ ✓ ✓ MLP Link
+model
+24 [58] RL ✓ ✓ ✓ ✓ MLP Link
+25 [29] ContinualRL ✓ ✓ ✓ ✓ MLP Link
+26 [64] Densityestimation ✓ ✓ ✓ ✓ MLP
+27 [44] Neuralimageenhancement ✓ ✓ ✓ ✓ MLP
+28 [26] Continuallearning ✓ ✓ ✓ ✓ MLP
+29 [20] Continuallearning ✓ ✓ ✓ ✓ MLP Link
+30 [34] Adaptationofneuralnetwork ✓ ✓ ✓ ✓ MLP
+architectures
+31 [46] Networkcompression ✓ ✓ ✓ ✓ MLP
+32 [7] Internallearning(computervi- ✓ ✓ ✓ ✓ CNN Link
+sion)
+33 [16] Learningdifferentialequations ✓ ✓ ✓ ✓ MLP
+34 [2] Imageediting ✓ ✓ ✓ ✓ CNN Link
+35 [75] Domainadaptation,NLP ✓ ✓ ✓ ✓ ✓ Attention Link
+36 [48] Autonomousdriving ✓ ✓ ✓ ✓ Attention,
+RNN, CNN,
+MLP
+37 [78] NLP ✓ ✓ ✓ ✓ ✓ ✓ MLP Link
+38 [52] Domaingeneralization ✓ ✓ ✓ ✓ MLP
+39 [66] 3Dpointcloudprocessing ✓ ✓ ✓ ✓ MLP
+40 [19] Imageprocessing ✓ ✓ ✓ ✓ CNN Link
+41 [79] Few-shotlearning ✓ ✓ ✓ ✓ CNN Link
+9
+--- PAGE 10 ---
+ABriefReviewofHypernetworksinDeepLearning
+Table2:Importantapplicationsofhypernetworks,arrangedbyascendingpublicationyear,andtheircategorizationbasedonInput:(i)task-conditioned,(ii)noise-
+conditioned,and(iii)data-conditioned;output,i.e.,weightgeneration:(i)generateonce,(ii)generatecomponent-wise,(iii)generatechunk-wise,and(iv)generate
+multiple;Inputvariability:(i)staticinputs,and(ii)dynamicinputs;Outputvariability:(i)staticweights,and(ii)dynamicweights;andarchitectureofhypernets(SN:
+SerialNumber,Ref.:Reference,DL:DeepLearning,RL:Reinforcementlearning).
+Input Output InputVar. OutVar.
+SN Ref. DLProblem Architecture Code
+(i) (ii) (iii) (i) (ii) (iii) (iv) (i) (ii) (i) (ii)
+42 [14] Treatmenteffectsestimation ✓ ✓ ✓ ✓ ✓ ✓ ✓ MLP
+43 [6] Meta-RL ✓ ✓ ✓ ✓ MLP
+44 [54] Zero-shotRL ✓ ✓ ✓ ✓ MLP Link
+45 [70] Soundrepresentation ✓ ✓ ✓ ✓ CNN
+46 [28] Densityestimation ✓ ✓ ✓ ✓ CNN
+47 [9] Quantumcomputing ✓ ✓ ✓ ✓ MLP Link
+48 [57] Neuralstyletransfer ✓ ✓ ✓ ✓ MLP
+49 [21] Cameraposelocalization ✓ ✓ ✓ ✓ Attention, Link
+MLP
+50 [77] Knowledgedistillation,visual- ✓ ✓ ✓ ✓ MLP
+ization
+Few-shotLearning: Few-shotlearningisasub-fieldofmachinelearningthatfocusesontrainingmodelstolearnnew
+conceptsortaskswithonlyalimitednumberoftrainingexamples. Unliketraditionalmachinelearningapproachesthat
+typicallyrequirelargeamountsoflabeleddataforeachtask,few-shotlearningaimstogeneralizeknowledgefroma
+smallsupportsetoflabeledexamplestoclassifyorrecognizenewinstances. Toaddressthepracticaldifficultiesof
+existingtechniquestooperateinhigh-dimensionalparameterspaceswithextremelylimited-datasettings,Rusuetal.
+[56]applieddata-conditionedhypernets.Theyemployedencoder-decoderbasedhypernetwhichlearnsadata-dependent
+latentgenerativerepresentationofmodelparametersthatsharesinformationbetweendifferenttasksthroughsoftweight
+sharingofhypernets. TheyalsoachievedSOTAresultsandshowedthattheproposedtechniquecancaptureuncertainty
+inthedata. Senderaetal.[61]alsoapplieddata-conditionedhypernettofew-shotlearningbycombiningkernelsand
+hypernets. Thekernelswereusedtoextractsupportinformationfromdataofdifferenttasksthatactasinputtothe
+hypernetwhichgeneratesweightsforthetargettask. Similarly,Zhaoetal.[81],Zie˛ba[82],Senderaetal.[62]also
+appliedhypernets,andutilizedsoftweightsharing,forfew-shotlearning.
+ManifoldLearning: Manifoldlearningisasub-fieldofmachinelearningthatfocusesoncapturingtheunderlying
+structureorgeometryofhigh-dimensionaldatainlower-dimensionalrepresentationsormanifolds. Itaimstouncover
+theintrinsicrelationshipsandpatternswithinthedatabymappingittoalower-dimensionalspace,enablingbetter
+visualization,clustering,orclassification. Hypernetworkscanbeutilizedinthecontextofmanifoldlearningtoenhance
+therepresentationlearningprocess. Bygeneratingweightsorparametersforthetargetnetworkbasedontheinput,
+hypernetworkscanadaptivelylearnamanifoldthatcapturestheintricatedatastructure[63]. Deutschetal.[17]applied
+noise-conditionedhypernetworkstomaplatentvectorsforgeneratingtargetnetworkweightsthatgeneralizemode
+connectivityinlosslandscapetohigherdimensionalmanifolds.
+AutoML:AutoML,shortforAutomatedMachineLearning,referstothedevelopmentofalgorithms,systems,and
+tools that automate various aspects of the machine learning pipeline, e.g., neural architecture search (NAS) and
+automatedhyperparameteroptimization. Zhangetal.[80]appliedhypernetworksforNASwheretheymodeledneural
+architecturesofaDNNasgraphandusedthemasinputtohypernettogeneratethetargetnetworkweights. They
+achievedabout10timesfasterresultsthantheSOTA.Similarly,Brocketal.[8],Pengetal.[51]presentanotherexample
+of application of hypernets to NAS, where they exploit soft weight sharing property of hypernets for information
+sharingamongdifferentarchitectures. Forhyperparameteroptimization,LorraineandDuvenaud[41]appliedhypernets
+that take hyperparameters of the target network as input and generate optimal weights for the target network, and
+henceperformjointtrainingfortargetnetworkparametersandhyperparameterswhichareotherwisetrainedinnested
+optimizationloops. TheauthorsprovedtheefficacyoftheproposedtechniqueagainsttheSOTAtotrainthousandsof
+hyperparameters.
+Pareto-frontLearning: Pareto-frontlearning,alsoknownasmulti-objectiveoptimization,isatechniquethataddresses
+problemswithmultipleconflictingobjectives,e.g.,multitaskinghasmultipletasksthatmayhaveconflictinggradients.
+Itaimstofindasetofsolutionsthatrepresentthetrade-offamongdifferentobjectives,ratherthanasingleoptimal
+solution. InPareto-frontlearning,thegoalistoidentifyasetofsolutionsthatcannotbeimprovedinoneobjective
+withoutsacrificingperformanceinanotherobjective.ThesesolutionsarereferredtoasPareto-optimalornon-dominated
+solutionsandlieonthePareto-front,whichrepresentsthebestpossibletrade-offbetweenobjectives. Navonetal.[45]
+appliedhypernetstolearntheentirePareto-front,whichatinferencetimetakesapreferentialpointonthePareto-front
+andgeneratesPareto-frontweightsforthetargetnetworkwhoselossvectorisinthedirectionoftheray. Theyshowed
+that the proposed hypernets are computationally very efficient as compared with the SOTA and can scale to large
+models, suchasResNet18. ThisworkisfurtherextendedinHoangetal.[27], wherehypernetgeneratesmultiple
+solutions,andTranetal.[72],whichconsidercompletedscalarizationfunctionsinthePareto-frontlearning.
+10
+--- PAGE 11 ---
+ABriefReviewofHypernetworksinDeepLearning
+DomainAdaptation:Domainadaptationreferstotheprocessofadaptingamachinelearningmodeltrainedonasource
+domaintoperformwellinadifferenttargetdomain. Itisacrucialchallengeinmachinelearningwhenthereisashiftor
+discrepancybetweenthedistributionofthesourceandthetargetdata. Hypernetscanplayavaluableroleindomain
+adaptationbydynamicallygeneratingoradaptingmodelparameters,architectures,orothercomponentstoeffectively
+handledomainshifts. Forexample,Volketal.[75]werethefirsttoproposehypernetsfordomainadaptation. They
+useddata-conditionedhypernetswhereexamplesfromthetargetdomainsareusedasinputtohypernetthatgenerates
+weightsforthetargetnetwork. Thisgiveshypernetsabilitytolearnandshareinformationfromexistingdomainswith
+targetdomainthroughsharedtraining.
+CausalInference: Causalinferenceisafieldofstudythatfocusesonunderstandingandestimatingcausalrelationships
+betweenvariables. Itaimstouncoverthecause-and-effectrelationshipswithinasystembyleveragingobservationalor
+experimentaldata. Causalinferenceisparticularlyimportantwheninferringtheimpactoftreatments/interventions/
+policiesonoutcomesofinterest. Recently,wewerethefirsttoapplyhypernetstoheterogeneoustreatmenteffects
+(HTE)estimationproblem[14]. Weappliedtask-conditionedhypernetswhereeachpotentialoutcome(PO)function
+isconsideredasatask. EmbeddingsofPOfunctionsareusedasinputtohypernetthatgeneratesparametersforthe
+correspondingPOfunction,i.e.,factualandcounterfactualmodels. Basedonsoftweightsharingofhypernets,this
+workpresentsthefirstgeneralmechanismtotrainHTElearnersthatenablesend-to-endinter-treatmentinformation
+sharingamongthePOfunctionsandhelpstogetreliableestimates,especiallywithlimited-sizeobservationaldata. The
+proposedframeworkalsoincorporatesdropoutinthehypernetthatallowstogeneratemultiplesetsofparametersfor
+thePOfunctionsandhelpsinuncertaintyquantification.
+UncertaintyQuantification: Uncertaintyquantificationisacriticalaspectofdeeplearninganddecision-makingthat
+involvesestimatingandunderstandingtheuncertaintyassociatedwithmodelpredictionsoroutcomes. Itprovidesa
+measureofconfidenceorreliabilityinthepredictionsmadebyamodel,particularlyinsituationswherethemodel
+encountersunseenoruncertaindata. HypernetscaneffectivelytrainuncertaintyawareDNNsbyleveragingtechniques
+likesamplingmultipleinputsfromthenoisedistribution[33]orincorporatingdropoutwithinthehypernetsthemselves
+[15]. By generating multiple sets of weights for the main network, hypernets create an ensemble of models, each
+withdifferentparameterconfigurations. Thisensemble-basedapproachaidsinestimatinguncertaintyinthemodel
+predictions. Kruegeretal.[33]proposedBayesianhypernetsthattakerandomnoiseasinputtoproducedistributions
+overtheweightsofthetargetnetworkandshowedcompetitiveperformanceforuncertainty. RatzlaffandFuxin[53]
+alsoappliednoise-conditionedhypernetsforuncertaintyquantificationandshowedthattheproposedtechniqueprovides
+abetterestimateofuncertaintyascomparedtotheensemblelearningtechnique. Inaddition,Chauhanetal.[15]used
+dropoutinthetask-conditionedhypernetstogeneratemultiplesetsofweightsforthetargetnetworkandthushelpingto
+estimateuncertainty.
+AdversarialDefence: Adversarialdefenceindeeplearningreferstothetechniquesusedtoenhancetherobustnessand
+resilienceofmodelsagainstadversarialattacks. Adversarialattacksinvolvemakingcarefullycraftedperturbations
+to input data in order to deceive or mislead deep learning models [42]. By incorporating hypernetworks, models
+canenhancetheirabilitytodetectanddefendagainstadversarialattacksbydynamicallygeneratingoradaptingtheir
+weightsorarchitectures. Forexample,Sunetal.[69]generateddata-dependentadaptiveconvolutionkernelstoimprove
+therobustnessofCNNsagainstadversarialattacksandweresuccessfulinspontaneouslydetectingattacksgeneratedby
+Gaussiannoise,fastgradientsignmethods,andblack-boxattackmethods. Themodelsdevelopedwithhypernetsare
+highlyadaptiveandcustomizedtothedata. Similarly,Kristiadietal.[32],RatzlaffandFuxin[53],Kruegeretal.[33]
+alsofoundnoise-conditionedhypernetsrobusttoadversarialexamplesascomparedwiththeSOTA.
+Multitasking: Multitaskingreferstothecapabilityofamodeltoperformmultipletasksorlearnmultipleobjectives
+simultaneously. Itinvolvesleveragingsharedrepresentationsandparametersacrossdifferenttaskstoenhancelearning
+efficiency and overall performance. Hypernets can be applied in the context of multitasking to facilitate the joint
+learningofmultipletasksbydynamicallygeneratingoradaptingthemodel’sparametersorarchitectures. Specifically,
+wecantraintask-conditionedhypernetsformultitaskingwhereembeddingofataskactasinputtothehypernetthat
+generatesweightsforthecorrespondingtask. Wecaneithergenerateentiremodelforeachofthetasksorcanonly
+generatenon-sharedpartsofamultitaskingnetwork. Thehypernetsfacilitatesuchmodelstoshareinformationacross
+differenttasksaswellashavespecificpersonalizedmodelforeachtask. Forexample,Mahabadietal.[43]applied
+task-conditionedhypernetsthatshareknowledgeacrossthetasksaswellasgeneratetask-specificmodelsandachieved
+benchmarkresults. Navonetal.[45]alsostudiedtask-conditionedhypernetsforPareto-frontlearningtoaddressthe
+conflictinggradientsamongdifferentobjectivesandobtainedimpressiveresultsonmultitasking,includingfairnessand
+imagesegmentation.
+ReinforcementLearning: ReinforcementLearning(RL)focusesontrainingagentstomakesequentialdecisionsinan
+environmenttomaximizeacumulativereward. RLoperatesthroughaninteractionloopwheretheagenttakesactions,
+receivesfeedbackintheformofrewards,andlearnsoptimalpoliciesthroughtrialanderror. Hypernetscanbeusedto
+11
+--- PAGE 12 ---
+ABriefReviewofHypernetworksinDeepLearning
+dynamicallygenerateoradaptnetworkarchitectures,modelparameters,orexplorationstrategiesinRLagents. By
+usingahypernetwork,theRLagentcaneffectivelylearntocustomizeitsinternalrepresentationsorpoliciesbasedon
+thespecificcharacteristicsoftheenvironmentortask. Forexample,Sarafianetal.[58]appliedhypernetstogenerate
+thebuildingblocksofRL,i.e.,policynetworksandQ-functions,ratherthanusingMLPs. Theyshowedfastertraining
+andimprovedperformanceondifferentalgorithmsforRLandinmeta-RL.Similarly,noise-conditionedhypernetsare
+usedin[74]togenerateweightsofeachBellmaniterationwithHyperRNN,andtask-conditionedhypernetswereused
+inRLforgeneralizationacrosstasks[6],continualRL[29],andzero-shotlearning[54].
+NaturalLanguageProcessing: Naturallanguageprocessing(NLP)isasub-fieldofartificialintelligencethatfocuses
+ontheinteractionbetweencomputersandhumanlanguage. Itinvolvesvarioustasks,suchaslanguagegeneration,
+sentimentanalysis,machinetranslation,andquestionanswering,amongothers. InthecontextofNLP,hypernetscan
+beusedtogenerateoradaptneuralnetworkarchitectures,tuninghyperparameters,forneuralarchitecturesearch,and
+fortransferlearninganddomainadaptationetc. Forexample,Volketal.[75]applieddata-conditionedhypernetfor
+out-of-distribution(OOD)generalization. TheyusedT5encoder-decoderframeworktogenerateauniquesignaturefor
+eachexamplefromdifferentsourcedomains. Thissignatureactsasinputtothehypernetandgeneratesparametersfor
+thetargetnetwork–adynamicandadaptivenetwork.Asdiscussedabove,Mahabadietal.[43]appliedtask-conditioned
+hypernets to fine-tune the pre-trained language models by generating weights for the bottleneck adapters. In the
+multitaskingsetting,theymodeledtask,adapterlocationandlayeridasdifferenttasksandusedembeddingofthese
+tasksasinputtothehypernetthathelpsinsharedlearningandachievingparameterefficiency.
+ComputerVision: Computervisionfocusesonenablingcomputerstounderstandandinterpretvisualinformationfrom
+imagesorvideos. Computervisionalgorithmsaimtoreplicatehumanvisualperceptionbydetectingandrecognizing
+objects, understandingtheirspatialrelationships, extractingfeatures, andmakingsenseofthevisualscene. Some
+applicationsofhypernetsincomputervisionare: Haetal.[24],intheirpioneeringwork,firstappliedtask-conditioned
+hypernetsforimageclassification,Alalufetal.[2],Muller[44]applieddata-conditionedhypernets,whereimageactsas
+inputtohypernet,forimageenhancement,andRatzlaffandFuxin[53]appliednoise-conditionedhypernetsforimage
+classification. Data-conditionedhypernetsarealsoappliedtosemanticsegmentationin[47]. Someotherapplications
+ofhypernetsincomputervisionarecameraposeestimation[21],neuralstyletransfer[57],imageprocessing/editing
+[2],andneuralimageenhancement[44]. Itistobenotedthatcomputervisionisavastsubjectandencompassesmany
+problemsettingsdiscussedearliersotheycanbeusedassuchwithchangeofdomainrelateddataormodels. For
+example,hypernetsdevelopedforAutoML,domainadaption,continuallearning,andfederatedlearningetc. canbe
+appliedtocomputervisionproblemsaswell.
+Theaboveapplicationsofhypernetsarenotexhaustiveandsomeotherinterestingareaswherehypernetshaveproduced
+theSOTAresultsareknowledgegraphlearning[5],shapelearning[39],networkcompression[46],learningdifferential
+equations [16], 3D point cloud processing [65], speech processing [70], quantum computing [9], and knowledge
+distillation[77]etc. Theseapplicationsdemonstratethewide-rangingpotentialofhypernetworksindeeplearning,
+enablingadaptiveandtask-specificparametergenerationforimprovedmodelperformanceandgeneralization.
+5 WhencanweuseHypernets?
+Afterdiscussingwhatahypernetis,howitworks,itsdifferenttypes,anditscurrentapplications,themostimportant
+questioniswhenandwheretoutilizehypernets. Thiswillhelpresearchersandpractitionersfullyharnessthebenefits
+ofthisversatiletechniqueindeeplearning. Onestraightforwardanswertothequestion,‘WhencanweuseHypernets?’
+is‘inallthoseapplicationareaswhereitisalreadyapplied’. Thereisalonglistofapplicationareaswherehypernets
+arealreadyinuse,andthereader’sareaofinterestislikelycovered. Basedonthecharacteristicsandapplications
+ofhypernetsdiscussedabove,wehavegeneralizedandformulatedsomequestions/scenariosforreaderstocheckif
+hypernetscanbeappliedtoaspecificarea/problemsetting. Ifouranswerisyestoanyofthescenarios,thenwecan
+applyhypernetstotheproblemsettingunderconsideration.
+Arethereanyrelatedcomponentsintheproblemsettingunderconsideration?
+Here,acomponentcanrefertoatask,dataset,orneuralnetwork. Thisisoneofthemostimportantscenarios/questions,
+andseveralapplications,asdiscussedabove,fallunderthisscenario. Iftheanswertothisquestionisyes,thenwecan
+employtask-conditionedhypernetstosolvetheproblemunderconsideration,wheretaskidentityisusedtogenerate
+thetargetnetworkforthecomponent. Byconditioningonthecomponent(task,dataset,ornetwork),wecanperform
+jointtrainingofdifferentcomponentsbyexploitingthesoftweightsharingofhypernets. Thisenablesthehypernetsto
+shareinformationamongcomponents,leadingtoimprovedperformance[14]. Thus,sharinginformationisthekey
+toachievingbetterresultsforrelatedcomponents. Thequestioncanbereformulatedas,‘Doweneedinformation
+sharinginourproblemsetting?’. Allthetask-conditionedapplicationsofhypernetsdiscussedinTable2fallunderthis
+scenario. Forexample,multitasking[43]hasrelatedtasks(ascomponents),andhypernetshelpinsharedlearningwhile
+12
+--- PAGE 13 ---
+ABriefReviewofHypernetworksinDeepLearning
+havingpersonalizednetworksforeachtask. Similarly,continuallearning[49],federatedlearning[63],heterogeneous
+treatmenteffectsestimation[14],transferlearning[49],anddomainadaptation[75]fallunderthisscenario.
+Doweneedadata-adaptiveneuralnetwork?
+Thisisanotherimportantscenariowithseveralapplicationsacrossdifferentproblemsettings. Inotherwords,wecan
+ask,‘Areweworkinginasettingwherethetargetnetworkhastobecustomizedtotheinputdata?’ or‘Arethedata
+changingregularly?’. Inthisscenario,wecanemploydata-conditionedhypernetsthattakedataasinputandadaptively
+generatetheparametersofthetargetnetwork. Duringtraining,thehypernettakestheavailabledataandlearnsthe
+intrinsiccharacteristicsofthedatatogeneratethetargetnetwork. Then,atinferencetime,itcantakenewdatawith
+slightlydifferentcharacteristicsandgeneratethetargetnetworkbasedonthelearnedcharacteristicsoftheexistingdata.
+Itisnotedthatthereissomesimilaritybetweentask-conditionedanddata-conditionedsettings,sosomeproblemsmay
+bemodelledusingeithertechnique. Fromexistingresearch,itisunclearwhentomodelaproblemasdata-conditioned
+ortask-conditioned, anditneedstobeexplored. However, itwilldependontheproblemunderconsideration, the
+availabilityofdata,andthenumberoftasks. Allthedata-conditionedapplicationsofhypernetsdiscussedinTable2fall
+underthisscenario. Forexample,inneuralimageenhancement[44],weareinterestedinimprovingthequalityofan
+image,soweneedatargetnetworkspecifictotheimageforagoodqualityoutput. Thus,data-conditionedhypernets
+aresuitableforthisapplication. Similarly,adversarialdefence[69],shapelearning[39],cameraposeestimation[21],
+neuralstyletransfer[57],few-shotlearning[79],and3Dpointcloudprocessing[66]fallunderthisscenario.
+Doweneedadynamicneuralnetworkarchitecture?
+Here,dynamicneuralnetworkarchitecturemeansthearchitectureofthetargetnetworkisnotknownorfixedattraining
+time. Thisscenariohaslimitedbutimportantapplications. Inthiscase,ahypernettakessomeinformationaboutthe
+architectureofthetargetnetworkandgeneratestheparametersaccordingly. Forexample,neuralarchitecturesearch
+[80]issuchanapplication,whichusesgraphhypernetworksthattakethecomputationgraphofthetargetnetworkas
+inputtogeneratethenetworkparameters. Similarly,anotherexampleofthisscenarioiswhenrecurrentneuralnetworks
+areimplementedwithhypernets[24],whichneedadynamicnetworkarchitecturetoaccountforavariablenumberof
+time-steps.
+Doweneedfastertraining/parameterefficiency?Asdiscussedearlier,hypernetscanachieveparameterefficiency
+orweightcompression, whichmeansthatthe‘learnable’weightsofHyperDNNarefewerthanthecorresponding
+DNN.Thisisexpectedtoachievefastertrainingaswell. Thiscouldbeusefulforlimitedresourcesettingsandwould
+dependontheproblemsettingaswellasthearchitectureofthehypernets. Forexample,asdiscussedearlier,Mahabadi
+etal.[43]appliedtask-conditionedhypernetstofine-tunepre-trainedlanguagemodelsbygeneratingweightsforthe
+bottleneckadapters. Inthemultitaskingsetting,theymodelledtask,adapterlocation,andlayeridentityasdifferent
+tasksandusedembeddingsofthesetasksasinputtothehypernetthathelpsinsharedlearningandachievedparameter
+efficiency. Similarly,Zhaoetal.[81]alsodemonstratedparameterefficiencyinafew-shotlearningsetting.
+Doweneeduncertaintyquantification?Thisisaspecificapplicationscenarioforhypernets. Hypernetscanbeused
+foruncertaintyquantificationeitherusingnoise-conditionedhypernets[33]orbyusingdropoutinthehypernets[15].
+Asdiscussedearlier,insomesettings,hypernetscanproducebetteruncertaintyestimates,e.g.,[33,53]. However,
+if uncertainty estimation is the sole purpose of the study, then existing uncertainty estimation techniques must be
+exploredfirst. However,usingdropout[67]inthehypernetarchitecture,similartousingdropoutinstandardDNNs,
+cancomplementtheexistinghypernetsandhelpinuncertaintyquantification.
+The scenarios discussed have overlaps, so multiple scenarios can fit a problem under consideration. For example,
+Mahabadietal.[43]consideredfine-tuninglanguagemodelsusinghypernets,whichachievedparameterefficiency
+andusedtask-conditioning(relatedcomponentsetting)tosolvemultipletasks. Thus,bythinkingaboutthesebroad
+scenarios,onecandetermineifhypernetsapplytoaproblemsettingunderconsideration.
+6 ChallengesandFutureDirections
+Hypernetworkshaveshownenormouspotentialinenhancingdeeplearningmodelswithincreasedflexibility,efficiency,
+and generalization. However, several challenges and opportunities for future research and development remain
+under-explored. Inthis section, wediscuss someofthe key challengesand proposepotential directionsfor future
+exploration.
+Initialization Challenge: The initialization challenge in hypernetworks refers to the difficulty of initializing the
+hypernetworkparameterseffectively, asfindingsuitableinitialvaluesforthehypernetworkparametersisfarfrom
+beingresolved. Onereasonfortheinitializationchallengeisthattheweightsofthetargetnetworkaregeneratedatthe
+outputlayerofhypernet,andweightsgenerationdoesnotconsiderlayer-wisearchitectureofthetargetnetwork. So,
+initializationofhypernetweightsusingclassicalinitializationtechniques,suchasXavier[23]andKaiminginitialization
+13
+--- PAGE 14 ---
+ABriefReviewofHypernetworksinDeepLearning
+[25], does not guarantee that weights of target network are initialized in the same range. The performance of the
+hypernetworkishighlyinfluencedbytheinitialstateofthetargetnetworkanditsparametersthataregeneratedat
+theoutputlayerofthehypernet. Ifthetargetnetworkispoorlyinitialized, itcanpropagateerrorsoruncertainties
+tothehypernetwork,affectingitsabilitytogenerateoradaptparameterseffectively. Changetal.[10]werethefirst
+todiscussthechallengeofinitializinghypernets. TheyshowedthatclassicaltechniquesofinitializingDNNsdonot
+workwellwithhypernets,however,adaptiveoptimizers,suchasAdam[30],canaddresstheissuetosomeextent. The
+authorssuggestedinitializingthehypernetweightsinamannerthatallowsthetargetnetworkweightstoapproximate
+theconventionalinitializationofDNNs. However,itisdifficulttoadoptthisbecausetheweightsofthetargetnetwork
+aretypicallygeneratedtogether. Wemaysolvethischallengeifweightgenerationprocessisawareofthelayer-wise
+architecture of the target network. Moreover, recently, Beck et al. [6] also showed that initialization challenge of
+hypernetsoccurseveninmeta-RLandclassicalinitializationtechniquesfail.
+Complexity/Scalability: Oneoftheprimarychallengesinhypernetworksisscalabilityandefficiencyofhypernetwork-
+basedmodels. AsthesizeandcomplexityoftargetDNNsincrease,hypernetworksalsobecomeverycomplex,e.g.,the
+sizeoftheoutputlayeristypicallym×nwheremisthenumberofneuronsinthepenultimatelayerofhypernetandn
+isthenumberofweightsinthetargetnetwork. So,hypernetsmaynotbesuitableforlargemodelsunlessappropriate
+weight-generationstrategiesaredevelopedandused. Although,therearesomeapproaches,suchasmultipleweight
+generation[14]andchunk-wiseweightgeneration[8]tomanagethecomplexityofhypernetsbutitneedsmoreresearch
+toaddressthescalabilitychallengeandmakehypernetworksmorepracticalforreal-worldapplications.
+NumericalStability: Numericalstabilityinhypernetworksreferstotheabilityofthemodeltomaintainaccurateand
+reliablecomputationsthroughoutthetrainingandinferenceprocess. Hypernets,likestandardneuralnetworks,can
+encounternumericalstabilityissues[58]. Onecommonnumericalstabilityissueinhypernetworksisthevanishingor
+explodinggradientsproblem. Duringthetrainingprocess,gradientscanbecomeextremelysmallorlarge,makingit
+difficultforthemodeltoeffectivelyupdatetheparameters. Thiscanresultinslowconvergenceorunstabletraining
+dynamics. Toaddressnumericalstabilityissuesinhypernets,varioustechniquescanbeemployed,suchascareful
+initializationofthemodel’sparameters,theuseofgradientclipping,whichboundsthegradientvaluestopreventthem
+frombecomingtoolarge,anddifferentregularizationtechniquessuchasweightdecay,dropout,andspectralnorm[14]
+thathelpimprovenumericalstabilitybypreventingoverfittingandpromotingsmootheroptimization. Furthermore,
+similartostandardDNNs,usingappropriateactivationfunctions,suchasReLUorLeakyReLU,canhelpalleviatethe
+vanishinggradientproblembyprovidingnon-linearitiesthatallowformoreeffectivegradientpropagation. Itisalso
+importanttochooseappropriateoptimizationalgorithmsthatareknownfortheirstability,suchasAdam[30],which
+canhandlethetrainingdynamicsofhypernetworksmoreeffectively[10].
+TheoreticalUnderstanding: Theoreticalanalysisofhypernetworksinvolvesstudyingtheirrepresentationalcapacity,
+learning dynamics, and generalization properties. By understanding the theoretical foundations of hypernetworks,
+researchers can gain insights into the underlying principles that drive their effectiveness and explore new avenues
+forimprovingtheirperformance. JustlikeDNNs,understandingtheworkingofhypernetsisfarfrombeingsolved.
+Although,therearesomeworksthatprovidetheoreticalinsightsintohypernets,e.g.,Littwinetal.[38]highlighted
+thatinfinitelywidehypernetworksmaynotconvergetoaglobalminimumusinggradientdescent,butconvexitycan
+beachievedbyincreasingthedimensionalityofthehypernetwork’soutput. GalantiandWolf[22]alsostudiedthe
+modularityofhypernetsandshowedthathypernetscanbemoreefficientthantheembedding-basedmethodformapping
+aninputtoafunction. Intuitively,hypernetsmapaninputtoonepointonalow-dimensionalmanifoldforweightsof
+targetnetwork[63]–theoreticalinsightsintotheconnectionbetweentwocanbeveryhelpful. Thus,moreresearchinto
+thetheoreticalpropertiesofhypernetswillhelptomakethemmorepopularandwillalsoattractmoreresearch.
+Uncertainty-awareDeepLearning: Uncertainty-awareneuralnetworksallowformorereliableandrobustpredictions,
+especiallyinscenarioswhereuncertaintyestimationiscrucial,suchasdecision-makingunderuncertainty,safety-critical
+applications,orwhenworkingwithlimitedornoisydata[1]. DespitethesuccessofDNNsandthedevelopmentof
+differentuncertaintyquantificationtechniques,itstillremainsanopenproblemtoquantifythepredictionuncertainty
+[32]. Hypernetshaveopenedanewdoortouncertaintyquantificationasnoise-conditionedhypernetscangenerate
+distribution on target network weights and have been shown to have better uncertainties than the SOTA [33, 53].
+Similarly,Chauhanetal.[15]usedtask-conditionedhypernetswithdropouttogeneratemultiplesetsofweightsforthe
+targetnetwork. Furtherresearchintothiscanprovidecomputationallyefficientandeffectivetechniquesascompared
+withothertechniques,suchasensemblemethods,whichneedtotrainmultiplemodels.
+InterpretabilityEnhancement: Itwillbehelpfulforthecommunitytodevelopmethodsforvisualizing,analyzing,
+andexplainingthetask-specificweightsgeneratedbyhypernetworks. Thisincludesdevelopingintuitivevisualization
+methods,andfeaturerelevanceanalysistechniquesthatprovidedeeperinsightsintotheweightgenerationanddecision-
+makingprocessofhypernetwork-basedmodels.
+14
+--- PAGE 15 ---
+ABriefReviewofHypernetworksinDeepLearning
+ModelCompressionandEfficiency: Hypernetworkscanaidinmodelcompressionandefficiencyinsomeproblem
+settings[81,43],wheresmallerhypernetsaretrainedtogeneratelargertargetnetworksthatcanreducethememory
+footprintandcomputationalrequirementsofthemodel. Thisisparticularlyusefulinresource-constrainedenvironments
+wherememoryandcomputationalresourcesarelimited,andhypernetscanbestudiedspecificallyforsuchsettings.
+UsageGuidelines: Hypernetworksaddadditionalcomplexitytosolvingproblems. AswithHyperDNN,wehavean
+additionalnetworktogenerateweightsforthetargetDNN.Hypernetsintroduceadditionalhyperparametersrelatedto
+theweightgenerationprocess,e.g.,whatkindofweightgenerationshouldbeusedandhowmanychunksshouldbe
+used. Someresearchandguidelinesareneededtoguidetheresearchersthroughthesechoices,stressingtheneedfora
+comparativestudyofdifferentapproachesundervaryingproblemsettings.
+Thus,thefieldofhypernetworksindeeplearningpresentsseveralchallengesandopportunitiesforfutureresearch. The
+advancementsintheseareaswillpavethewayforthewidespreadadoptionandeffectiveutilizationofhypernetworksin
+variousdomainsofdeeplearning.
+7 Conclusion
+Hypernetworkshaveemergedasapromisingapproachtoenhancedeeplearningmodelswithincreasedflexibility,
+efficiency,generalization,uncertaintyawareness,andinformationsharing. Theyhaveopenednewavenuesforresearch
+andapplicationsacrossvariousdomains. Inthispaper,wepresentedthefirstreviewofhypernetworksinthecontext
+of deep learning. We provided an illustrative example to explain the workings of hypernetworks and proposed a
+categorizationbasedonfivedesigncriteria: inputs,outputs,variabilityofinputsandoutputs,andthearchitectureof
+hypernets. Wediscussedsomeoftheimportantapplicationsofhypernetstodifferentdeeplearningproblems,including
+multitasking,continuallearning,federatedlearning,causalinference,andcomputervision. Additionally,wepresented
+scenariosandquestionstohelpreadersunderstandwhetherhypernetscanbeappliedtoagivenproblemsetting. Finally,
+wehighlightedchallengesthatneedtobeaddressedinthefuture. Thesechallengesincludeinitialization,stability,
+scalability,efficiency,andtheneedfortheoreticalinsights. Futureresearchshouldfocusontacklingthesechallengesto
+furtheradvancethefieldofhypernetworksandmakethemmoreaccessibleandpracticalforreal-worldapplications. By
+addressingtheseissues,thepotentialofhypernetworkscanbefullyrealized,leadingtomorerobustandversatiledeep
+learningmodels.
+Acknowledgements
+ThisworkwassupportedinpartbytheNationalInstituteforHealthResearch(NIHR)OxfordBiomedicalResearch
+Centre (BRC) and in part by InnoHK Project Programme 3.2: Human Intelligence and AI Integration (HIAI) for
+thePredictionandInterventionofCVDs: WarningSystematHongKongCentreforCerebro-cardiovascularHealth
+Engineering (COCHE). DAC was supported by an NIHR Research Professorship, an RAEng Research Chair, the
+InnoHKHongKongCentreforCerebro-cardiovascularHealthEngineering(COCHE),theNIHROxfordBiomedical
+ResearchCentre(BRC),andthePandemicSciencesInstituteattheUniversityofOxford. Theviewsexpressedare
+thoseoftheauthorsandnotnecessarilythoseoftheNHS,theNIHR,theDepartmentofHealth,theInnoHK–ITC,or
+theUniversityofOxford.
+StatementsandDeclarations
+CompetingInterests
+Theauthorsdeclarethattheyhavenocompetinginterests.
+DataAvailability
+Datasharingnotapplicabletothisarticleasnodatasetsweregeneratedoranalysedduringthecurrentstudy.
+Contributions
+V.K.C.conceptualizedthestudy,analyzedtheliteratureandwrotethefirstdraft. J.Z.,P.L.andS.M.helpedtofilterout
+theliteratureandprepareTable2. D.A.Cdidsupervisionandfundingacquisition. Allauthorsreviewedandapproved
+thefinalmanuscript.
+15
+--- PAGE 16 ---
+ABriefReviewofHypernetworksinDeepLearning
+References
+[1] Abdar,M.,Pourpanah,F.,Hussain,S.,Rezazadegan,D.,Liu,L.,Ghavamzadeh,M.,Fieguth,P.,Cao,X.,Khosravi,
+A.,Acharya,U.R.,etal.(2021). Areviewofuncertaintyquantificationindeeplearning: Techniques,applications
+andchallenges. InformationFusion,76:243–297.
+[2] Alaluf,Y.,Tov,O.,Mokady,R.,Gal,R.,andBermano,A.(2022). Hyperstyle: Styleganinversionwithhyper-
+networksforrealimageediting. InProceedingsoftheIEEE/CVFConferenceonComputerVisionandPattern
+Recognition(CVPR),pages18511–18521.
+[3] Alzubaidi,L.,Zhang,J.,Humaidi,A.J.,Al-Dujaili,A.,Duan,Y.,Al-Shamma,O.,Santamaría,J.,Fadhel,M.A.,Al-
+Amidie,M.,andFarhan,L.(2021). Reviewofdeeplearning: Concepts,cnnarchitectures,challenges,applications,
+futuredirections. JournalofBigData,8:1–74.
+[4] Armstrong, J. and Clifton, D. (2021). Continual learning of longitudinal health records. arXiv preprint
+arXiv:2112.11944.
+[5] Balaževic´,I.,Allen,C.,andHospedales,T.M.(2019). Hypernetworkknowledgegraphembeddings. InArtificial
+NeuralNetworksandMachineLearning–ICANN2019: WorkshopandSpecialSessions: 28thInternationalConfer-
+enceonArtificialNeuralNetworks,Munich,Germany,September17–19,2019,Proceedings28,pages553–565.
+Springer.
+[6] Beck,J.,Jackson,M.T.,Vuorio,R.,andWhiteson,S.(2023). Hypernetworksinmeta-reinforcementlearning. In
+ConferenceonRobotLearning,pages1478–1487.PMLR.
+[7] Bensadoun,R.,Gur,S.,Galanti,T.,andWolf,L.(2021). Metainternallearning. InRanzato,M.,Beygelzimer,A.,
+Dauphin,Y.,Liang,P.,andVaughan,J.W.,editors,AdvancesinNeuralInformationProcessingSystems,volume34,
+pages20645–20656.CurranAssociates,Inc.
+[8] Brock, A., Lim, T., Ritchie, J., andWeston, N.(2018). SMASH:One-shotmodelarchitecturesearchthrough
+hypernetworks. InInternationalConferenceonLearningRepresentations.
+[9] Carrasquilla,J.,Hibat-Allah,M.,Inack,E.,Makhzani,A.,Neklyudov,K.,Taylor,G.W.,andTorlai,G.(2023).Quan-
+tumhypernetworks: Trainingbinaryneuralnetworksinquantumsuperposition. arXivpreprintarXiv:2301.08292.
+[10] Chang,O.,Flokas,L.,andLipson,H.(2020). Principledweightinitializationforhypernetworks. InInternational
+ConferenceonLearningRepresentations.
+[11] Chauhan, V. K., Molaei, S., Tania, M. H., Thakur, A., Zhu, T., and Clifton, D. A. (2023a). Adversarial de-
+confoundinginindividualisedtreatmenteffectsestimation. InProceedingsofThe26thInternationalConferenceon
+ArtificialIntelligenceandStatistics,volume206,pages837–849.PMLR.
+[12] Chauhan, V. K., Singh, S., and Sharma, A. (2024a). HCR-Net: A deep learning based script independent
+handwrittencharacterrecognitionnetwork. MultimediaToolsandApplications,pages1–35.
+[13] Chauhan,V.K.,Thakur,A.,O’Donoghue,O.,Rohanian,O.,Molaei,S.,andClifton,D.A.(2024b). Continuous
+patientstateattentionmodelforaddressingirregularityinelectronichealthrecords. BMCMedicalInformaticsand
+DecisionMaking,24(1):117.
+[14] Chauhan,V.K.,Zhou,J.,Ghosheh,G.,Molaei,S.,andAClifton,D.(2024c).Dynamicinter-treatmentinformation
+sharingforindividualizedtreatmenteffectsestimation. InProceedingsofThe27thInternationalConferenceon
+ArtificialIntelligenceandStatistics,volume238,pages3529–3537.PMLR.
+[15] Chauhan, V. K., Zhou, J., Molaei, S., Ghosheh, G., and Clifton, D. A. (2023b). Dynamic inter-treatment
+informationsharingforheterogeneoustreatmenteffectsestimation.
+[16] deAvilaBelbute-Peres,F.,fanChen,Y.,andSha,F.(2021). HyperPINN:Learningparameterizeddifferential
+equationswithphysics-informedhypernetworks. InTheSymbiosisofDeepLearningandDifferentialEquations.
+[17] Deutsch,L.,Nijkamp,E.,andYang,Y.(2019). Agenerativemodelforsamplinghigh-performanceanddiverse
+weightsforneuralnetworks. arXivpreprintarXiv:1905.02898.
+[18] Devlin,J.,Chang,M.-W.,Lee,K.,andToutanova,K.(2019).BERT:Pre-trainingofdeepbidirectionaltransformers
+forlanguageunderstanding.InProceedingsofthe2019ConferenceoftheNorthAmericanChapteroftheAssociation
+forComputationalLinguistics:HumanLanguageTechnologies,Volume1(LongandShortPapers),pages4171–4186,
+Minneapolis,Minnesota.AssociationforComputationalLinguistics.
+[19] Dinh,T.M.,Tran,A.T.,Nguyen,R.,andHua,B.-S.(2022). Hyperinverter: Improvingstyleganinversionvia
+hypernetwork. InProceedingsoftheIEEE/CVFConferenceonComputerVisionandPatternRecognition,pages
+11389–11398.
+16
+--- PAGE 17 ---
+ABriefReviewofHypernetworksinDeepLearning
+[20] Ehret,B.,Henning,C.,Cervera,M.,Meulemans,A.,Oswald,J.V.,andGrewe,B.F.(2021). Continuallearning
+inrecurrentneuralnetworks. InInternationalConferenceonLearningRepresentations.
+[21] Ferens,R.andKeller,Y.(2023). Hyperpose: Cameraposelocalizationusingattentionhypernetworks. arXiv
+preprintarXiv:2303.02610.
+[22] Galanti,T.andWolf,L.(2020). Onthemodularityofhypernetworks. InLarochelle,H.,Ranzato,M.,Hadsell,
+R., Balcan, M., and Lin, H., editors, Advances in Neural Information Processing Systems, volume 33, pages
+10409–10419.CurranAssociates,Inc.
+[23] Glorot,X.andBengio,Y.(2010). Understandingthedifficultyoftrainingdeepfeedforwardneuralnetworks.
+InProceedingsoftheThirteenthInternationalConferenceonArtificialIntelligenceandStatistics,pages249–256.
+JMLRWorkshopandConferenceProceedings.
+[24] Ha,D.,Dai,A.M.,andLe,Q.V.(2017). Hypernetworks. InInternationalConferenceonLearningRepresenta-
+tions.
+[25] He,K.,Zhang,X.,Ren,S.,andSun,J.(2015). Delvingdeepintorectifiers: Surpassinghuman-levelperformance
+on imagenet classification. In Proceedings of the IEEE International Conference on Computer Vision, pages
+1026–1034.
+[26] Henning,C.,Cervera,M.,D’Angelo,F.,Oswald,J.V.,Traber,R.,Ehret,B.,Kobayashi,S.,Grewe,B.F.,and
+Sacramento,J.(2021). Posteriormeta-replayforcontinuallearning. InBeygelzimer,A.,Dauphin,Y.,Liang,P.,and
+Vaughan,J.W.,editors,AdvancesinNeuralInformationProcessingSystems.
+[27] Hoang,L.P.,Le,D.D.,Tuan,T.A.,andThang,T.N.(2023). Improvingparetofrontlearningviamulti-sample
+hypernetworks. InProceedingsoftheAAAIConferenceonArtificialIntelligence,volume37(7),pages7875–7883.
+[28] Höfer,T.,Kiefer,B.,Messmer,M.,andZell,A.(2023). Hyperposepdf-hypernetworkspredictingtheprobability
+distributiononso(3). InProceedingsoftheIEEE/CVFWinterConferenceonApplicationsofComputerVision
+(WACV),pages2369–2379.
+[29] Huang,Y.,Xie,K.,Bharadhwaj,H.,andShkurti,F.(2021). Continualmodel-basedreinforcementlearningwith
+hypernetworks. In2021IEEEInternationalConferenceonRoboticsandAutomation(ICRA),pages799–805.IEEE.
+[30] Kingma,D.P.andBa,J.(2014). Adam: Amethodforstochasticoptimization. arXivpreprintarXiv:1412.6980.
+[31] Klocek,S.,Maziarka,Ł.,Wołczyk,M.,Tabor,J.,Nowak,J.,andS´mieja,M.(2019). Hypernetworkfunctional
+imagerepresentation. InArtificialNeuralNetworksandMachineLearning–ICANN2019: WorkshopandSpecial
+Sessions: 28thInternationalConferenceonArtificialNeuralNetworks,Munich,Germany,September17–19,2019,
+Proceedings28,pages496–510.Springer.
+[32] Kristiadi,A.,Däubener,S.,andFischer,A.(2019). Predictiveuncertaintyquantificationwithcompounddensity
+networks. arXivpreprintarXiv:1902.01080.
+[33] Krueger,D.,Huang,C.-W.,Islam,R.,Turner,R.,Lacoste,A.,andCourville,A.(2018). Bayesianhypernetworks.
+[34] Lamb,A.,Saveliev,E.,Li,Y.,Tschiatschek,S.,Longden,C.,Woodhead,S.,Hernández-Lobato,J.M.,Turner,
+R.E.,Cameron,P.,andZhang,C.(2021). Contextualhypernetworksfornovelfeatureadaptation. arXivpreprint
+arXiv:2104.05860.
+[35] Li,Y.(2017). Deepreinforcementlearning: Anoverview. arXivpreprintarXiv:1701.07274.
+[36] Li, Y., Gu, S., Zhang, K., Van Gool, L., and Timofte, R. (2020). Dhp: Differentiable meta pruning via hy-
+pernetworks. InComputerVision–ECCV2020: 16thEuropeanConference,Glasgow,UK,August23–28,2020,
+Proceedings,PartVIII16,pages608–624.Springer.
+[37] Litany, O., Maron, H., Acuna, D., Kautz, J., Chechik, G., and Fidler, S. (2022). Federated learning with
+heterogeneousarchitecturesusinggraphhypernetworks. arXivpreprintarXiv:2201.08459.
+[38] Littwin,E.,Galanti,T.,Wolf,L.,andYang,G.(2020). Oninfinite-widthhypernetworks. Advancesinneural
+informationprocessingsystems,33:13226–13237.
+[39] Littwin,G.andWolf,L.(2019). Deepmetafunctionalsforshaperepresentation. InProceedingsoftheIEEE/CVF
+InternationalConferenceonComputerVision,pages1824–1833.
+[40] Liu,Z.,Mu,H.,Zhang,X.,Guo,Z.,Yang,X.,Cheng,K.-T.,andSun,J.(2019). Metapruning: Metalearningfor
+automaticneuralnetworkchannelpruning. InProceedingsoftheIEEE/CVFInternationalConferenceonComputer
+Vision,pages3296–3305.
+[41] Lorraine,J.andDuvenaud,D.(2018). Stochastichyperparameteroptimizationthroughhypernetworks.
+[42] Madry,A.,Makelov,A.,Schmidt,L.,Tsipras,D.,andVladu,A.(2017). Towardsdeeplearningmodelsresistant
+toadversarialattacks. arXivpreprintarXiv:1706.06083.
+17
+--- PAGE 18 ---
+ABriefReviewofHypernetworksinDeepLearning
+[43] Mahabadi,R.K.,Ruder,S.,Dehghani,M.,andHenderson,J.(2021). Parameter-efficientmulti-taskfine-tuning
+for transformers via shared hypernetworks. In Proceedings of the 59th Annual Meeting of the Association for
+ComputationalLinguisticsandthe11thInternationalJointConferenceonNaturalLanguageProcessing(Volume1:
+LongPapers),pages565–576.
+[44] Muller, L. K. (2021). Overparametrization of hypernetworks at fixed flop-count enables fast neural image
+enhancement. InProceedingsoftheIEEE/CVFConferenceonComputerVisionandPatternRecognition(CVPR)
+Workshops,pages284–293.
+[45] Navon,A.,Shamsian,A.,Fetaya,E.,andChechik,G.(2021). Learningtheparetofrontwithhypernetworks. In
+InternationalConferenceonLearningRepresentations.
+[46] Nguyen,P.,Tran,T.,Le,K.,Gupta,S.,Rana,S.,Nguyen,D.,Nguyen,T.,Ryan,S.,andVenkatesh,S.(2021).
+Fastconditionalnetworkcompressionusingbayesianhypernetworks. InOliver,N.,Pérez-Cruz,F.,Kramer,S.,
+Read,J.,andLozano,J.A.,editors,MachineLearningandKnowledgeDiscoveryinDatabases.ResearchTrack,
+pages330–345,Cham.SpringerInternationalPublishing.
+[47] Nirkin, Y., Wolf, L., and Hassner, T. (2021). Hyperseg: Patch-wise hypernetwork for real-time semantic
+segmentation. InProceedingsoftheIEEE/CVFConferenceonComputerVisionandPatternRecognition,pages
+4061–4070.
+[48] Oh,G.andPeng,H.(2022). Cvae-h: Conditionalizingvariationalautoencodersviahypernetworksandtrajectory
+forecastingforautonomousdriving. arXivpreprintarXiv:2201.09874.
+[49] Oswald,J.V.,Henning,C.,Grewe,B.F.,andSacramento,J.(2020). Continuallearningwithhypernetworks. In
+InternationalConferenceonLearningRepresentations.
+[50] Pan,Z.,Liang,Y.,Zhang,J.,Yi,X.,Yu,Y.,andZheng,Y.(2018).Hyperst-net:Hypernetworksforspatio-temporal
+forecasting. arXivpreprintarXiv:1809.10889.
+[51] Peng,H.,Du,H.,Yu,H.,Li,Q.,Liao,J.,andFu,J.(2020). Creamofthecrop: Distillingprioritizedpathsfor
+one-shotneuralarchitecturesearch. AdvancesinNeuralInformationProcessingSystems,33:17955–17964.
+[52] Qu,J.,Faney,T.,Wang,Z.,Gallinari,P.,Yousef,S.,anddeHemptinne,J.-C.(2022). Hmoe: Hypernetwork-based
+mixtureofexpertsfordomaingeneralization. arXivpreprintarXiv:2211.08253.
+[53] Ratzlaff,N.andFuxin,L.(2019). Hypergan: Agenerativemodelfordiverse,performantneuralnetworks. In
+InternationalConferenceonMachineLearning,pages5361–5369.PMLR.
+[54] Rezaei-Shoshtari,S.,Morissette,C.,Hogan,F.R.,Dudek,G.,andMeger,D.(2023). Hypernetworksforzero-shot
+transferinreinforcementlearning. arXivpreprintarXiv:2211.15457.
+[55] Rohanian,O.,Jauncey,H.,Nouriborji,M.,Chauhan,V.K.,Gonalves,B.P.,Kartsonaki,C.,ClinicalCharacterisa-
+tionGroup,I.,Merson,L.,andClifton,D.(2023). Usingbottleneckadapterstoidentifycancerinclinicalnotes
+underlow-resourceconstraints. InThe22ndWorkshoponBiomedicalNaturalLanguageProcessingandBioNLP
+SharedTasks,pages62–78,Toronto,Canada.AssociationforComputationalLinguistics.
+[56] Rusu,A.A.,Rao,D.,Sygnowski,J.,Vinyals,O.,Pascanu,R.,Osindero,S.,andHadsell,R.(2019). Meta-learning
+withlatentembeddingoptimization. InInternationalConferenceonLearningRepresentations.
+[57] Ruta, D., Gilbert, A., Motiian, S., Faieta, B., Lin, Z., andCollomosse, J.(2023). Hypernst: Hyper-networks
+forneuralstyletransfer. InKarlinsky,L.,Michaeli,T.,andNishino,K.,editors,ComputerVision–ECCV2022
+Workshops,pages201–217,Cham.SpringerNatureSwitzerland.
+[58] Sarafian,E.,Keynan,S.,andKraus,S.(2021). Recomposingthereinforcementlearningbuildingblockswith
+hypernetworks. InInternationalConferenceonMachineLearning,pages9301–9312.PMLR.
+[59] Schmidhuber,J.(1992). Learningtocontrolfast-weightmemories: Analternativetodynamicrecurrentnetworks.
+NeuralComputation,4(1):131–139.
+[60] Schmidhuber, J. (1993). A ‘self-referential’weight matrix. In ICANN’93: Proceedings of the International
+ConferenceonArtificialNeuralNetworksAmsterdam,TheNetherlands13–16September19933,pages446–450.
+Springer.
+[61] Sendera,M.,Przewie˛z´likowski,M.,Karanowski,K.,Zie˛ba,M.,Tabor,J.,andSpurek,P.(2023a). Hypershot:
+Few-shotlearningbykernelhypernetworks. InProceedingsoftheIEEE/CVFWinterConferenceonApplicationsof
+ComputerVision,pages2469–2478.
+[62] Sendera,M.,Przewie˛z´likowski,M.,Miksa,J.,Rajski,M.,Karanowski,K.,Zie˛ba,M.,Tabor,J.,andSpurek,P.
+(2023b). Thegeneralframeworkforfew-shotlearningbykernelhypernetworks. MachineVisionandApplications,
+34(4):53.
+18
+--- PAGE 19 ---
+ABriefReviewofHypernetworksinDeepLearning
+[63] Shamsian,A.,Navon,A.,Fetaya,E.,andChechik,G.(2021).Personalizedfederatedlearningusinghypernetworks.
+InInternationalConferenceonMachineLearning,pages9489–9502.PMLR.
+[64] Shih,A.,Sadigh,D.,andErmon,S.(2021). Hyperspns:Compactandexpressiveprobabilisticcircuits. InRanzato,
+M.,Beygelzimer,A.,Dauphin,Y.,Liang,P.,andVaughan,J.W.,editors,AdvancesinNeuralInformationProcessing
+Systems,volume34,pages8571–8582.CurranAssociates,Inc.
+[65] Spurek,P.,Winczowski,S.,Tabor,J.,Zamorski,M.,Zieba,M.,andTrzcin´ski,T.(2020). Hypernetworkapproach
+to generating point clouds. In Proceedings of the 37th International Conference on Machine Learning, pages
+9099–9108.
+[66] Spurek,P.,Zieba,M.,Tabor,J.,andTrzcinski,T.(2022). Generalhypernetworkframeworkforcreating3dpoint
+clouds. IEEETransactionsonPatternAnalysisandMachineIntelligence,44(12):9995–10008.
+[67] Srivastava,N.,Hinton,G.,Krizhevsky,A.,Sutskever,I.,andSalakhutdinov,R.(2014). Dropout: asimplewayto
+preventneuralnetworksfromoverfitting. Thejournalofmachinelearningresearch,15(1):1929–1958.
+[68] Stanley,K.O.,D’Ambrosio,D.B.,andGauci,J.(2009). Ahypercube-basedencodingforevolvinglarge-scale
+neuralnetworks. ArtificialLife,15(2):185–212.
+[69] Sun, Z., Ozay, M., andOkatani, T.(2017). Hypernetworkswithstatisticalfilteringfordefendingadversarial
+examples. arXivpreprintarXiv:1711.01791.
+[70] Szatkowski,F.,Piczak,K.J.,Spurek,P.,Tabor,J.,andTrzcinski,T.(2022). Hypersound: Generatingimplicit
+neuralrepresentationsofaudiosignalswithhypernetworks. InSixthWorkshoponMeta-LearningattheConference
+onNeuralInformationProcessingSystems.
+[71] Tay,Y.,Zhao,Z.,Bahri,D.,Metzler,D.,andJuan,D.-C.(2021). Hypergridtransformers: Towardsasinglemodel
+formultipletasks. InInternationalConferenceonLearningRepresentations.
+[72] Tran,T.A.,Hoang,L.P.,Le,D.D.,andTran,T.N.(2023). Aframeworkforcontrollableparetofrontlearning
+withcompletedscalarizationfunctionsanditsapplications. arXivpreprintarXiv:2302.12487.
+[73] Vaswani,A.,Shazeer,N.,Parmar,N.,Uszkoreit,J.,Jones,L.,Gomez,A.N.,Kaiser,Ł.,andPolosukhin,I.(2017).
+Attentionisallyouneed. AdvancesinNeuralInformationProcessingSystems,30.
+[74] Vincent,T.,Metelli,A.M.,Belousov,B.,Peters,J.,Restelli,M.,andD’Eramo,C.(2023).Parameterizedprojected
+bellmanoperator.
+[75] Volk,T.,Ben-David,E.,Amosy,O.,Chechik,G.,andReichart,R.(2022). Example-basedhypernetworksfor
+out-of-distributiongeneralization. arXivpreprintarXiv:2203.14276.
+[76] Wiens,J.,Guttag,J.,andHorvitz,E.(2014). Astudyintransferlearning: leveragingdatafrommultiplehospitals
+toenhancehospital-specificpredictions. JournaloftheAmericanMedicalInformaticsAssociation,21(4):699–706.
+[77] Wu,Q.,Bauer,D.,Chen,Y.,andMa,K.-L.(2023). Hyperinr: Afastandpredictivehypernetworkforimplicit
+neuralrepresentationsviaknowledgedistillation. arXivpreprintarXiv:2304.04188.
+[78] Wullach,T.,Adler,A.,andMinkov,E.(2022). Character-levelhypernetworksforhatespeechdetection. Expert
+SystemswithApplications,205:117571.
+[79] Yin,L.,Perez-Rua,J.M.,andLiang,K.J.(2022). Sylph: Ahypernetworkframeworkforincrementalfew-shot
+objectdetection. InProceedingsoftheIEEE/CVFConferenceonComputerVisionandPatternRecognition,pages
+9035–9045.
+[80] Zhang,C.,Ren,M.,andUrtasun,R.(2019). Graphhypernetworksforneuralarchitecturesearch. InInternational
+ConferenceonLearningRepresentations.
+[81] Zhao,D.,Kobayashi,S.,Sacramento,J.,andVonOswald,J.(2020). Meta-learningviahypernetworks. In4th
+WorkshoponMeta-LearningatNeurIPS2020(MetaLearn2020).NeurIPS.
+[82] Zie˛ba, M. (2022). Hypermaml: Few-shot adaptation of deep models with hypernetworks. arXiv preprint
+arXiv:2205.15745.
+19

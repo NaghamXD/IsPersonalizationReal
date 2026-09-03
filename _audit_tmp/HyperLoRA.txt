@@ -1,0 +1,594 @@
+
+--- PAGE 1 ---
+HypeLoRA: Hyper-Network-Generated LoRA
+Adapters for Calibrated Language Model
+Fine-Tuning
+Bartosz Trojan1,2[0009−0005−2649−3194] and Filip Gębala1,3[0009−0002−3020−4365]
+1 Upper-Secondary Schools of Communications in Cracow
+2 bartosztrojanofficial@gmail.com
+3 fgebalaofficial@gmail.com
+Abstract. ModernTransformer-basedmodelsfrequentlysufferfrommis-
+calibration, producing overconfident predictions that do not reflect true
+empirical frequencies. This work investigates the calibration dynamics
+ofLoRA:Low-RankAdaptationandanovelhyper-network-basedadap-
+tation framework as parameter-efficient alternatives to full fine-tuning
+forRoBERTa.EvaluatingacrosstheGLUEbenchmark,wedemonstrate
+thatLoRA-basedadaptationconsistentlyachievescalibrationparitywith
+(and in specific tasks exceeds) full fine-tuning, while maintaining signif-
+icantly higher parameter efficiency. We further explore a dynamic ap-
+proachwhereasharedhyper-networkgeneratesLoRAfactors(AandB
+matrices)toinducestructuralcouplingacrosslayers.Thisapproachpro-
+ducedresultssimilartostandardLoRAfine-tuning,evenachievingbetter
+MCC on CoLA dataset. Our study also reveal a critical trade-off: con-
+strainingtheadaptationspace(e.g.,freezingmatricesA)actsasapow-
+erful regularizer that enhances Expected Calibration Error (ECE), but
+necessitates a carefully balanced sacrifice in downstream task accuracy.
+Tosupportfutureresearch,weprovideaunifiedandreproducibleimple-
+mentation of contemporary calibration metrics, including ECE, MCE,
+and ACE. Our findings clarify the relationship between parameter effi-
+ciency and probabilistic reliability, positioning structured low-rank up-
+datesasaviablefoundationforuncertainty-awareTransformerarchitec-
+tures. https://github.com/btrojan-official/HypeLoRA
+Keywords: Fine-tuning·LoRA·Hyper-network·RoBERTa·Calibra-
+tion · ECE
+1 Introduction
+Transformer-based architectures have become the dominant paradigm across a
+wide range of machine learning domains, including natural language process-
+ing [4], computer vision [5], and speech recognition [1]. While these models
+achieve state-of-the-art predictive accuracy, it is now well established that their
+probabilistic outputs are often poorly calibrated [3]. Formally, a model is con-
+sidered calibrated if the predicted confidence of a given class matches the true
+6202
+raM
+92
+]LC.sc[
+2v87291.3062:viXra
+--- PAGE 2 ---
+2 Bartosz Trojan and Filip Gębala
+empirical frequency of that class among all samples assigned that confidence
+score — that is, among all inputs where the model outputs probability p, ex-
+actly a fraction p should truly belong to the predicted class.
+Inthiswork,weexploreparameter-efficientalternativesforcalibratingtrans-
+formerbasedencoders.Weevaluatefine-tunedandaugmentedonLoRARoBERTa
+model on the GLUE benchmark using a comprehensive set of calibration met-
+rics, including Expected Calibration Error (ECE), Adaptive Calibration Error
+(ACE),andMaximumCalibrationError(MCE).Inaddition,weinvestigatethe
+useofhyper-networksasamechanismforinducingdynamiccalibrationbehavior
+within frozen transformer architectures.
+Additionally,westudyaframeworkinwhichahyper-networkgenerateslow-
+rank calibration signals. This setup aims to induce structural coupling across
+layers, forcing the model to learn a global calibration strategy rather than inde-
+pendent adjustments. We anticipated that this shared generation process would
+actasaregularizer,temperingoverlysharpprobabilitydistributions.Whilethis
+approach ultimately fails to yield consistent improvements, it provides valuable
+insightintothelimitationsofhyper-network-drivencalibrationfortransformers.
+Beyondempiricalevaluation,wealsoconsolidateandimplementaunifiedset
+of recent calibration metrics, providing clear and reproducible reference imple-
+mentations. This addresses the current fragmentation in calibration evaluation
+practices and facilitates more systematic comparison across methods.
+Our contributions can be summarized as follows:
+– WeprovideanevaluationofstandardandLoRAfine-tuningforcalibrationof
+RoBERTa models on the GLUE benchmark using multiple complementary
+calibration metrics i.e. ECE, MCE, ACE.
+– We investigate the use of hyper-networks and LoRA as mechanisms for sys-
+tematic model calibration and for analyzing the underlying causes of model
+failure.
+– We implement modern calibration metrics in a single evaluation framework.
+2 Related Work
+Pre-training.Large-scaleself-supervisedpre-trainingongenericcorporayields
+representationsthattransferacrossdownstreamtasks,asdemonstratedbymasked
+languagemodelingandautoregressiveobjectives[4,16].Domain-andtask-adaptive
+pre-trainingonunlabeleddatacanfurtherimproveperformance[7],yetthehigh
+computationalcostofpre-traininglargebackbonesmotivatesparameter-efficient
+adaptation methods.
+Fine-tuning large language models. Full-parameter fine-tuning is the most
+direct adaptation approach, but is computationally and memory demanding for
+large models [17]. When a single backbone such as RoBERTa [16] must be tai-
+lored to many tasks, storing full task-specific parameters and optimizer states
+becomes infeasible, motivating more resource-efficient alternatives.
+Parameter-efficient fine-tuning.PEFTmethodsupdateonlyasmallparam-
+eter subset per task while achieving performance comparable to full fine-tuning.
+--- PAGE 3 ---
+HypeLoRA for Calibrated Language Model Fine-Tuning 3
+Adapters [9] insert trainable bottleneck modules into each transformer block.
+Prefix-tuning [13] prepends learnable tokens to the input, optimizing a continu-
+ous prompt without modifying model weights. LoRA [10] injects trainable low-
+rankmatricesintoattentionlayerswithoutanyactivationfunction,substantially
+reducing trainable parameter count and memory cost.
+Model Calibration [25]. A calibrated model’s confidence estimates align with
+empirical likelihoods: formally, perfect calibration requires P(Y = y|Q = q) =
+q over the joint distribution P(Q,Y). We evaluate calibration primarily via
+expected calibration error (ECE) [6], alongside Classwise ECE, MCE, ACE,
+Thresholded ACE, and Brier Score [19,12,20,2]. Post-hoc methods such as tem-
+peraturescaling[18],Plattscaling[22],andisotonicregression[26]aresimplebut
+globally applied and brittle under distribution shift. Training-time approaches
+like label smoothing [15] and confidence-aware regularization [14] are more ex-
+pressive but require costly retraining.
+Hyper-networks. Hyper-networks parameterize weights as functions of exter-
+nalinputs,enablingdynamicgenerationofadaptationparameters[8].InPEFT,
+conditioninghyper-networksontaskidentitytogenerateadapterorlow-rankup-
+date parameters improves parameter sharing and multi-task performance with-
+out per-task parameter duplication [21]. Generating full weight tensors remains
+challengingduetoscalabilityandstabilityconcerns[11],sopracticalapproaches
+constrain generation to compact structures such as bottleneck adapters or low-
+rank factors.
+3 Proposed Approach
+We propose a parameter-efficient calibration mechanism that injects low-rank
+updatesintoafrozenRoBERTaencoder[16]viaacompacthyper-network(Fig-
+ure 1). The hyper-network conditions on a learned embedding associated with
+each target weight matrix, producing coordinated adaptation signals across all
+transformer layers while keeping all backbone parameters frozen.
+3.1 Problem Definition
+Let f (x) denote a pretrained transformer encoder with frozen parameters θ,
+θ
+producing a probability distribution over C classes for input x:
+p (y |x)=softmax(f (x)). (1)
+θ θ
+Our goal is to improve predictive calibration without modifying pretrained
+weights. Instead of post-hoc logit adjustments (e.g., temperature scaling), we
+introduce structured low-rank perturbations inside the transformer layers.
+3.2 Layer-Conditioned Low-Rank Updates with Hyper-Network
+ForaweightmatrixW ∈Rd×d ofpretrainedtransformer,weapplyaLoRA-style
+[10] low-rank perturbation:
+W′ =W +αAB, (2)
+--- PAGE 4 ---
+4 Bartosz Trojan and Filip Gębala
+A ⚡/❄
+layer 1 Query / Value Matrix ❄
+B ⚡
+... Hypernetwork 🔥
+(MLP / Transformer)
+A ⚡/❄
+layer 2 Query / Value Matrix ❄
+B ⚡
+... ...
+Fig.1.Ahyper-networkgeneratestheweightsfortheQueryandValuematricesinall
+attention blocks of the RoBERTa model, while the original pretrained weights remain
+frozen. The figure illustrates the approach in which the hyper-network produces both
+theAandBmatrices.Inthiswork,wealsopresentavariantwhereonlytheBmatrices
+aregeneratedbythehyper-network,andAmatricesarefixedwithrandomlyinitialized
+values, which isn’t shown on this figure.
+where A ∈ Rd×r and B ∈ Rr×d are low-rank factors of rank r < d, and α is a
+fixedscalingcoefficient.WeapplythisupdatetotheQueryandValueprojection
+matrices in each attention block.
+Unlike standard LoRA, which trains all of A and B matrices independently,
+we generate these factors via a shared hyper-network H , conditioned on layer
+ϕ
+embedding. Each target weight matrix — specifically the Query and Value
+projections in each layer — is associated with a dedicated learned embedding
+e ∈ Rdh. Concretely, if both As and Bs are generated for the Query and Value
+matricesinlayerℓ,therearefourembeddingsperlayer:eQ[ℓ], eQ[ℓ], eV[ℓ], eV[ℓ].
+A B A B
+Hyper-network H maps each such embedding e to target low-rank factor:
+ϕ
+AQ =H (eQ[ℓ]) BQ =H (eQ[ℓ]) AV =H (eV[ℓ]) BV =H (eV[ℓ])
+ℓ ϕ A ℓ ϕ B ℓ ϕ A ℓ ϕ B
+(3)
+--- PAGE 5 ---
+HypeLoRA for Calibrated Language Model Fine-Tuning 5
+The resulting vectors are reshaped into matrices of appropriate dimensions and
+appliedtotheirrespectiveweightmatrices.Thistiesalllayeradaptationsthrough
+a single generator, enforcing structural coherence and drastically reducing pa-
+rameter count relative to per-layer LoRA. The architecture of H is either a
+ϕ
+lightweight MLP or a small Transformer encoder operating over all embeddings
+jointly; implementation details are given in Section 4.3.
+Variants. We consider two operating modes depending on whether A ma-
+trices are generated or fixed:
+– Full generation: all A and B matrices are produced by H , meaning that
+ϕ
+there are four embeddings per layer in this scenario.
+– Fixed-A: A matrices are initialized once from a Kaiming uniform distribu-
+tion (similarly to [10]) and held fixed throughout training; only B matrices
+aregeneratedbyH ,meaningthatthereareonlytwoembeddingsperlayer.
+ϕ
+The intuition is that fixed random A matrices act as structured noise injec-
+tion into the frozen base model, encouraging the learned B matrices to be
+more robust.
+3.3 Training and Inference
+Duringtraining,H generatesAsandBsforalltargetweightmatrices.Theyare
+ϕ
+appliedtransientlyintheforwardpass—thestoredpretrainedweightsarenever
+modified. Gradients flow through the low-rank projections back to H , whose
+ϕ
+parameters ϕ are updated while θ-original pretrained model weights-remains
+frozen. We optimize the standard cross-entropy loss.
+At inference, the hyper-network again produces the low-rank factors on the
+fly, or they can be precomputed once to reduce runtime overhead. This de-
+sign maintains a strict separation between the frozen backbone and the learned
+adaptation, ensuring a minimal memory footprint and no risk of corrupting the
+pretrained representations.
+4 Experimental Setup
+4.1 Datasets
+We evaluate all of the experiments on the General Language Understanding
+Evaluation (GLUE) benchmark, a collection of sentence- and sentence-pair lan-
+guage understanding tasks designed to provide a standardized comparison of
+model performance across diverse NLP capabilities [24]. In this work, we use
+only GLUE tasks formulated as classification problems.
+– CoLA (Corpus of Linguistic Acceptability). A single-sentence accept-
+ability task where the model predicts whether a sentence is linguistically
+acceptable (binary). CoLA has 8.5k training examples and 1k test samples.
+– SST-2 (Stanford Sentiment Treebank). A single-sentence sentiment
+classification task where the model predicts positive vs. negative sentiment
+(binary). SST-2 has 67k training examples and 1.8k test examples.
+--- PAGE 6 ---
+6 Bartosz Trojan and Filip Gębala
+– QNLI(Question-answeringNaturalLanguageInference).Asentence-
+pair task (QA/NLI) where the model predicts whether a context sentence
+containstheanswertoaquestion(binary).QNLIhas105ktrainingexamples
+and 5.4k test examples.
+– MRPC (Microsoft Research Paraphrase Corpus). A sentence-pair
+paraphrase task where the model predicts whether two sentences are para-
+phrases(binary).MRPChas3.7ktrainingexamplesand1.7ktestexamples.
+– RTE(Recognizing TextualEntailment).Asentence-pairinferencetask
+(NLI)wherethemodelpredictswhetherahypothesisisentailedbyapremise
+(binary). RTE has 2.5k training and 3k test examples.
+– MNLI (Multi-Genre Natural Language Inference). A sentence-pair
+natural language inference task where the model predicts the relationship
+between a premise and a hypothesis (entailment, contradiction, or neutral;
+three-way classification). MNLI has 393k training examples and 20k test
+examples.
+4.2 Training and Evaluation Setup
+Unless stated otherwise, we follow the experimental protocol from the original
+LoRAwork[10]fortrainingandevaluation.Thetwomaindifferencesare(i)the
+introduction of a hyper-network to generate the low-rank update parameters
+and (ii) the specific injection strategy used to apply these generated updates
+within the frozen RoBERTa encoder [16]. For our approach, we use different
+peak learning rates (e.g., 1e−5 for the MLP and 4e−4 for the Transformer), as
+we observed that lower learning rates lead to more stable and effective training
+when using the MLP-based hyper-network.
+4.3 Hyper-network Architectures
+We consider two hyper-network architectures for generating the LoRA factors:
+a multilayer perceptron (MLP) and a Transformer encoder [23]. In both cases,
+each transformer layer identifier ℓ is represented by a learnable embedding of
+dimension 128.
+MLP.TheMLPconsistsoffourfullyconnectedlayers.Theinputdimension
+is 128, all hidden layers have width 2048, and the GELU as its activation func-
+tion. The output layer projects to the flattened LoRA parameter space. In all
+experiments, the hidden size of RoBERTa is 768 and the LoRA rank is r = 8,
+so the output dimension corresponds to 768×8 per generated factor.
+All MLP weights are initialized from a normal distribution. In the configu-
+ration where A matrices are fixed, it is initialized once using Kaiming uniform
+initialization and kept frozen, while only B is generated by the hyper-network.
+Transformer. In the Transformer-based variant, all layer embeddings (di-
+mension 128) are first projected with a linear layer to a hidden dimension of
+256 and then processed jointly by a Transformer encoder with 2 layers, 16 at-
+tention heads, and model dimension 256. The outputs corresponding to each
+--- PAGE 7 ---
+HypeLoRA for Calibrated Language Model Fine-Tuning 7
+layerarepassedthroughafinallinearprojectiontoproducetheflattenedLoRA
+parameters, either for both A and B matrices or only for Bs when As are fixed.
+All learnable parameters are initialized from a normal distribution, except
+for the fixed A matrices, which use Kaiming uniform initialization.
+4.4 Metrics
+Exactcalibrationmeasurementwithfinitesamplesisnotpossibleduetocontin-
+uous predicted confidence values. In practice, calibration error is approximated
+bypartitioningN predictionsintoM bins{b ,...,b }basedonpredictedprob-
+1 M
+abilities and comparing average confidence with empirical accuracy within each
+bin. M =10 for all of our experiments.
+ThemostwidelyusedmetricisExpected Calibration Error (ECE)[19],
+defined as the weighted average of per-bin confidence–accuracy gaps:
+M
+ECE= (cid:88) |b m | |acc(b )−conf(b )|, (4)
+N m m
+m=1
+where |b | is the number of samples in bin b , acc(b ) is the fraction of correct
+m m m
+predictions, and conf(b ) is the mean predicted probability within that bin.
+m
+The remaining metrics follow the same bin-level discrepancy idea with spe-
+cific modifications. Maximum Calibration Error (MCE) [19] replaces the
+weightedaveragewiththeworst-casebinmaximum.Classwise ECE (CECE)
+[12] computes the ECE-style sum separately for each class and averages across
+all K classes. Adaptive Calibration Error (ACE) [20] replaces fixed-width
+bins with equal-population bins, also averaging per class. Thresholded ACE
+(TACE) [20] further restricts ACE to predictions whose confidence exceeds a
+threshold ϵ, reducing the influence of near-zero probabilities. Finally, the Brier
+Score (BS) [2] is a proper scoring rule computing the mean squared error be-
+tween predicted probabilities and one-hot targets across all classes, providing a
+combined measure of calibration and sharpness.
+5 Results
+Herewepresenttheresultsofourexperiments,includingcalibrationanalysisfor
+standard Fine-Tuning (FT), Low-Rank Adaptation (LoRA), and our proposed
+hyper-network-based variants.
+5.1 Calibration of the Existing Methods
+Table 1 presents task performance and calibration metrics for standard Fine-
+Tuning and LoRA fine-tuning across selected GLUE benchmarks. LoRA consis-
+tently matches or improves predictive performance relative to full Fine-Tuning,
+with noticeable gains on CoLA, MRPC, QNLI, and RTE, while maintaining
+comparable results on MNLI.
+--- PAGE 8 ---
+8 Bartosz Trojan and Filip Gębala
+Table 1. Performance and calibration metrics across GLUE benchmarks for
+RoBERTa .FTdenotesstandardfine-tuning[16];LoRAdenotesLow-RankAdapta-
+large
+tion[10].Following[24],wereportMatthewsCorrelationCoefficient(MCC)forCoLA,
+F1 for MRPC, and Accuracy for other tasks. Minor score deviations from [10] are
+attributable to different random seeds; additionally, MRPC reports F1 (as in [16])
+rather than accuracy, and RTE (FT) is initialized from MNLI-pretrained weights for
+fair comparison [10].
+Metric CoLA SST-2 QNLI MRPC RTE MNLI
+Score↑ 61.68±0.73 94.50±0.41 92.64±0.22 90.37±0.41 85.32±1.37 87.17
+ECE↓ 0.136±0.008 0.035±0.017 0.072±0.002 0.111±0.023 0.104±0.045 0.074
+CECE↓ 0.138±0.007 0.036±0.016 0.072±0.002 0.114±0.021 0.113±0.038 0.050
+FT
+MCE↓ 0.339±0.074 0.277±0.242 0.539±0.111 0.308±0.163 0.309±0.159 0.202
+ACE↓ 0.134±0.009 0.033±0.016 0.071±0.002 0.110±0.021 0.103±0.039 0.073
+TACE0.01 ↓ 0.469±0.006 0.461±0.013 0.482±0.007 0.441±0.020 0.413±0.058 0.492
+BrierScore↓0.290±0.006 0.096±0.006 0.145±0.004 0.245±0.013 0.266±0.009 0.207
+Score↑ 63.94±0.21 94.99±0.18 93.07±0.05 93.18±0.40 87.61±0.21 87.19
+ECE↓ 0.120±0.025 0.046±0.001 0.036±0.011 0.088±0.012 0.124±0.007 0.043
+CECE↓ 0.123±0.024 0.046±0.001 0.037±0.011 0.088±0.011 0.125±0.006 0.029
+LoRA
+MCE↓ 0.282±0.038 0.340±0.111 0.123±0.052 0.424±0.097 0.502±0.156 0.257
+ACE↓ 0.114±0.024 0.040±0.003 0.035±0.010 0.084±0.012 0.114±0.002 0.043
+TACE0.01 ↓ 0.443±0.026 0.477±0.007 0.452±0.012 0.447±0.005 0.451±0.024 0.432
+BrierScore↓0.271±0.020 0.096±0.002 0.114±0.004 0.180±0.017 0.244±0.009 0.193
+Fromacalibrationperspective,ECEremainsrelativelystableacrossseedsfor
+both methods, typically exhibiting low variance. CECE closely follows ECE, re-
+flectingthepredominantlybinarystructureoftheevaluatedtasks.Asexpected,
+MCE shows substantially higher variability due to its sensitivity to worst-case
+confidencebins.ACEalignscloselywithECE,indicatinganapproximatelyuni-
+form distribution of samples across confidence bins.
+Acrosstasks,LoRAdemonstratesimprovedcalibrationonQNLIandMNLI,
+where ECE and Brier Score are consistently lower than under full Fine-Tuning.
+However,thisbehaviorisnotuniform.OnSST-2andRTE,Fine-Tuningachieves
+lower ECE values, suggesting better calibration despite slightly weaker predic-
+tive performance. The elevated values of TACE (TACE with threshold equal
+0.01
+to0.01)acrossbothmethodsindicatethatpredictionsareconcentratednearex-
+tremeprobabilities,leadingtohigh-confidenceoutputsandincreasedcalibration
+penalties when misclassifications occur.
+Overall,LoRAdoesnotuniformlyimprovecalibrationoverfullFine-Tuning.
+Itseffectistask-dependent,andimprovementsinpredictiveperformancedonot
+systematically translate into better uncertainty estimation.
+5.2 Our Approach - Calibration with Hyper-Network
+Table 2 reports the performance and calibration of the proposed hyper-network
+variantsonCoLAandSST-2,comparedtotheLoRAbaseline.Weevaluateboth
+MLP-based and Transformer-based hyper-networks, with either full generation
+of adapter matrices (A ) or with matrices A fixed (A ).
+gen fix
+On CoLA, the Transformer-based hyper-network with fully generated ma-
+trices (Transformer A ) achieves average highest performance, but also shows
+gen
+--- PAGE 9 ---
+HypeLoRA for Calibrated Language Model Fine-Tuning 9
+Table 2. We compare four hypernetwork configurations combining two architectures
+(MLPandTransformer)withtwoweightgenerationstrategies(A andA ),eachav-
+gen fix
+eragedover3seeds.TransformerA outperformstheLoRAbaselineonCoLA,though
+gen
+LoRA remains stronger on SST-2, suggesting task-dependent behavior. Interestingly,
+Transformer A achieves the best calibration across all runs despite not leading in
+fix
+Matthews Correlation Coefficient (MCC) or Accuracy.
+COLA SST-2
+MCC ↑ ECE ↓ Acc ↑ ECE ↓
+MLP A 63.54 0.116 94.84 0.037
+gen ±0.31 ±0.019 ±0.30 ±0.007
+MLP A 48.25 0.130 92.89 0.047
+fix ±13.01 ±0.015 ±1.41 ±0.011
+Transformer A 64.42 0.119 94.78 0.040
+gen ±1.75 ±0.009 ±0.08 ±0.003
+Transformer A 60.69 0.100 94.56 0.028
+fix ±0.35 ±0.010 ±0.08 ±0.004
+LoRA 63.94 0.120 94.99 0.046
+±0.21 ±0.025 ±0.18 ±0.001
+high variability across different seeds. It surpasses LoRA fine-tuning. However,
+its calibration remains similar to LoRA, indicating no inherent calibration ad-
+vantage from full matrix generation. When A matrices are fixed (Transformer
+A ), MCC value decreases, but ECE improves, representing the best calibra-
+fix
+tion among all evaluated configurations. We hypothesize that this calibration
+improvement is caused by a reduction in effective degrees of freedom - fixing A
+matrices constrains the adaptation space, acting as an implicit regularizer that
+prevents the model from becoming overconfident.
+The MLP-based variants follow the same qualitative pattern but exhibit re-
+duced stability. While MLP A maintains competitive performance, fixing A
+gen
+matrices leads to a substantial drop in performance without improving calibra-
+tion relative to the Transformer-based fixed configuration.
+OnSST-2,LoRAachievesthehighestpredictiveaccuracy.Bothhyper-network
+variantswithgeneratedmatricesremaincompetitive.Again,freezingmatricesA
+resultsinasmallbutconsistentdecreaseinaccuracy.However,theTransformer-
+basedfixedconfigurationyieldsthelowestECE,significantlyoutperformingboth
+LoRA and the fully generated variant.
+Contrary to our initial hypothesis, fully generated hyper-network adapters
+do not systematically improve calibration over LoRA, despite occasionally im-
+provingtaskperformance(notablyonCoLA).Instead,calibrationimprovements
+emerge primarily when matrices A are fixed. This constraint introduces a struc-
+tured transformation of the adapter input space, limiting overconfident predic-
+tionsandactingasaformofimplicitregularization.Theimprovementincalibra-
+tion is accompanied by a clear trade-off in predictive performance, particularly
+pronounced on CoLA.
+Additionally, as show on Fig. 2, we observe that extended training consis-
+tently leads to worsening calibration across all configurations, even when task
+metrics continue to improve. This behavior suggests progressive overfitting to
+thetrainingobjective,resultinginsharperpredictivedistributionsanddegraded
+uncertainty estimation.
+--- PAGE 10 ---
+10 Bartosz Trojan and Filip Gębala
+70
+60
+50
+40
+30
+20
+0 20 40 60 80
+Epoch
+noitalerroc
+swehttam
+CoLA
+96
+94
+92
+MLP A_gen
+MLP A_fixed
+T A_gen 90
+T A_fix
+LoRA
+88
+0 10 20 30 40 50 60
+Epoch
+ycarucca
+SST-2
+MLP A_gen
+MLP A_fixed
+T A_gen
+T A_fix
+LoRA
+0.20
+0.15
+0.10
+0.05
+0 20 40 60 80
+Epoch
+ece
+CoLA
+0.06
+0.05
+0.04
+MLP A_gen
+MLP A_fixed
+0.03
+T A_gen
+T A_fix
+LoRA 0.02
+0 10 20 30 40 50 60
+Epoch
+ece
+SST-2
+MLP A_gen
+MLP A_fixed
+T A_gen
+T A_fix
+LoRA
+Fig.2. Evaluation results on CoLA and SST-2 benchmarks, reported as Matthews
+Correlation Coefficient and accuracy (top row) alongside Expected Calibration Error
+(bottomrow),averagedacross3independentrandomseeds.A meansbothmatrices
+gen
+A and B are generated, and A means matrices A are fixed. LoRA [10] is included
+fix
+as a baseline. Fixing matrix A improves model calibration, albeit at the cost of task
+performance across both datasets.
+6 Conclusion
+In this work, we investigated parameter-efficient adaptation mechanisms as a
+novel approach to calibration for transformer-based language models. We an-
+alyzed standard Fine-Tuning and LoRA fine-tuning [10] applied to RoBERTa
+[16], and introduced a hyper-network-based variant in which low-rank update
+matrices are generated conditionally on transformer layer identity.
+Our evaluation across multiple GLUE benchmarks [24] yields three main
+findings. First, LoRA provides calibration comparable to full Fine-Tuning while
+retaining parameter efficiency, though calibration improvements remain task-
+dependent. Second, hyper-network-generated low-rank factors yield calibration
+broadly similar to standard LoRA, suggesting structural cross-layer coupling
+alone is insufficient for systematic confidence correction, but also our proposed
+Transformer-basedhyper-networkLoRAvariant(TransformerA )showedpromis-
+gen
+ing results, by outperforming standard LoRA on the CoLA benchmark. Third,
+freezing all of the A matrices (A ) modestly improves calibration at the cost
+fix
+of task performance, revealing a tension between representation stability and
+predictive sharpness. We additionally provide a unified, reproducible implemen-
+tationofsixcalibrationmetrics(ECE,CECE,MCE,ACE,TACE,BrierScore),
+--- PAGE 11 ---
+HypeLoRA for Calibrated Language Model Fine-Tuning 11
+contributing toward more systematic evaluation standards in transformer cali-
+bration research.
+Further Work Future work should investigate the mechanism behind the
+A calibration improvement — whether it stems from reduced flexibility, ad-
+fix
+ditional noise, or modified optimization dynamics. The CoLA advantage of the
+Transformerhyper-networkmotivatesfurtherstudyofthisarchitecture.Extend-
+ing evaluation to multi-class and out-of-distribution benchmarks would clarify
+whether observed improvements generalize beyond binary GLUE tasks.
+Acknowledgments. The authors are grateful to Dr. Kamil Książek, Dr. Tomasz
+Kuśmierczyk,andProf.JacekTaboroftheJagiellonianUniversityfortheirinvaluable
+guidance and for providing access to computational resources.
+Disclosure of Interests. The authors have no competing interests to declare that
+are relevant to the content of this article.
+References
+1. Baevski, A., Zhou, Y., Mohamed, A., Auli, M.: wav2vec 2.0: A framework for
+self-supervised learning of speech representations. Advances in neural information
+processing systems 33, 12449–12460 (2020)
+2. Brier, G.W.: Verification of forecasts expressed in terms of probability. Monthly
+Weather Review 78, 1–3 (1950), https://api.semanticscholar.org/CorpusID:
+122906757
+3. Desai, S., Durrett, G.: Calibration of pre-trained transformers. arXiv preprint
+arXiv:2003.07892 (2020)
+4. Devlin, J., Chang, M.W., Lee, K., Toutanova, K.: Bert: Pre-training of deep bidi-
+rectional transformers for language understanding. In: Proceedings of the 2019
+conference of the North American chapter of the association for computational
+linguistics: human language technologies, volume 1 (long and short papers). pp.
+4171–4186 (2019)
+5. Dosovitskiy, A.: An image is worth 16x16 words: Transformers for image recogni-
+tion at scale. arXiv preprint arXiv:2010.11929 (2020)
+6. Guo, C., Pleiss, G., Sun, Y., Weinberger, K.Q.: On calibration of modern neu-
+ral networks. In: Proceedings of the 34th International Conference on Machine
+Learning - Volume 70. p. 1321–1330. ICML’17, JMLR.org (2017)
+7. Gururangan, S., Marasović, A., Swayamdipta, S., Lo, K., Beltagy, I., Downey, D.,
+Smith,N.A.:Don’tstoppretraining:Adaptlanguagemodelstodomainsandtasks.
+In:Jurafsky,D.,Chai,J.,Schluter,N.,Tetreault,J.(eds.)Proceedingsofthe58th
+AnnualMeetingof theAssociation forComputationalLinguistics.pp.8342–8360.
+Association for Computational Linguistics, Online (Jul 2020). https://doi.org/10.
+18653/v1/2020.acl-main.740, https://aclanthology.org/2020.acl-main.740/
+8. Ha,D.,Dai,A.,Le,Q.V.:Hypernetworks.arXivpreprintarXiv:1609.09106(2016)
+9. He,R.,Liu,L.,Ye,H.,Tan,Q.,Ding,B.,Cheng,L.,Low,J.,Bing,L.,Si,L.:Onthe
+effectivenessofadapter-basedtuningforpretrainedlanguagemodeladaptation.In:
+Proceedings of the 59th annual meeting of the association for computational lin-
+guisticsandthe11thinternationaljointconferenceonnaturallanguageprocessing
+(volume 1: long papers). pp. 2208–2222 (2021)
+--- PAGE 12 ---
+12 Bartosz Trojan and Filip Gębala
+10. Hu,E.J.,Shen,Y.,Wallis,P.,Allen-Zhu,Z.,Li,Y.,Wang,S.,Wang,L.,Chen,W.:
+Lora: Low-rank adaptation of large language models. In: ICLR. OpenReview.net
+(2022), http://dblp.uni-trier.de/db/conf/iclr/iclr2022.html#HuSWALWWC22
+11. Jia, X., De Brabandere, B., Tuytelaars, T., Gool, L.V.: Dynamic filter networks.
+Advances in neural information processing systems 29 (2016)
+12. Kull,M.,PerelloNieto,M.,Kängsepp,M.,SilvaFilho,T.,Song,H.,Flach,P.:Be-
+yondtemperaturescaling:Obtainingwell-calibratedmulti-classprobabilitieswith
+dirichletcalibration.Advancesinneuralinformationprocessingsystems32(2019)
+13. Li, X.L., Liang, P.: Prefix-tuning: Optimizing continuous prompts for generation.
+arXiv preprint arXiv:2101.00190 (2021)
+14. Liang, G., Zhang, Y., Jacobs, N.: Neural network calibration for medical imag-
+ingclassificationusingdcaregularization.In:Internationalconferenceonmachine
+learning, workshop on uncertainty and robustness in deep learning (2020)
+15. Liu, B., Ben Ayed, I., Galdran, A., Dolz, J.: The devil is in the margin: Margin-
+based label smoothing for network calibration. In: Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition. pp. 80–88 (2022)
+16. Liu, Y., Ott, M., Goyal, N., Du, J., Joshi, M., Chen, D., Levy, O., Lewis, M.,
+Zettlemoyer, L., Stoyanov, V.: Roberta: A robustly optimized bert pretraining
+approach.In:InternationalConferenceonLearningRepresentations(ICLR)(2020)
+17. Lv, K., Yang, Y., Liu, T., Guo, Q., Qiu, X.: Full parameter fine-tuning for large
+language models with limited resources. In: Ku, L.W., Martins, A., Srikumar, V.
+(eds.) Proceedings of the 62nd Annual Meeting of the Association for Computa-
+tional Linguistics (Volume 1: Long Papers). pp. 8187–8198. Association for Com-
+putational Linguistics, Bangkok, Thailand (Aug 2024). https://doi.org/10.18653/
+v1/2024.acl-long.445, https://aclanthology.org/2024.acl-long.445/
+18. Mozafari,A.S.,Gomes,H.S.,Leão,W.,Janny,S.,Gagné,C.:Attendedtemperature
+scaling: a practical approach for calibrating deep neural networks. arXiv preprint
+arXiv:1810.11586 (2018)
+19. Naeini, M.P., Cooper, G., Hauskrecht, M.: Obtaining well calibrated probabili-
+ties using bayesian binning. In: Proceedings of the AAAI conference on artificial
+intelligence. vol. 29 (2015)
+20. Nixon,J.,Dusenberry,M.W.,Zhang,L.,Jerfel,G.,Tran,D.:Measuringcalibration
+in deep learning. In: CVPR workshops. vol. 2 (2019)
+21. Ortiz-Barajas, J.G., Gómez-Adorno, H., Solorio, T.: Hyperloader: Integrating
+hypernetwork-based lora and adapter layers into multi-task transformers for se-
+quence labelling (2024)
+22. Platt,J.,etal.:Probabilisticoutputsforsupportvectormachinesandcomparisons
+toregularizedlikelihoodmethods.Advancesinlargemarginclassifiers10(3),61–74
+(1999)
+23. Vaswani,A.,Shazeer,N.,Parmar,N.,Uszkoreit,J.,Jones,L.,Gomez,A.N.,Kaiser,
+Ł., Polosukhin, I.: Attention is all you need. Advances in neural information pro-
+cessing systems 30 (2017)
+24. Wang, A., Singh, A., Michael, J., Hill, F., Levy, O., Bowman, S.: Glue: A multi-
+taskbenchmarkandanalysisplatformfornaturallanguageunderstanding.In:Pro-
+ceedingsofthe2018EMNLPworkshopBlackboxNLP:Analyzingandinterpreting
+neural networks for NLP. pp. 353–355 (2018)
+25. Wang, C.: Calibration in deep learning: A survey of the state-of-the-art. arXiv
+preprint arXiv:2308.01222 (2023)
+26. Zadrozny, B., Elkan, C.: Transforming classifier scores into accurate multiclass
+probability estimates. In: Proceedings of the eighth ACM SIGKDD international
+conference on Knowledge discovery and data mining. pp. 694–699 (2002)
