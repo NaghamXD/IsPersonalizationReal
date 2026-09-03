@@ -51,7 +51,7 @@ def check_config():
 
 
 def run_pytests():
-    for t in ["tests/test_normalize.py", "tests/test_eval.py"]:
+    for t in ["tests/test_normalize.py", "tests/test_eval.py", "tests/test_windows.py"]:
         r = subprocess.run([sys.executable, t], cwd=ROOT, capture_output=True, text=True)
         print("  " + "\n  ".join(r.stdout.strip().splitlines()[-3:]))
         if r.returncode != 0:

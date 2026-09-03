@@ -14,6 +14,7 @@ to a fact; that distinction is the whole point of this file.
              for something we are citing.
 """
 
+import os
 from pathlib import Path
 
 # =============================================================================
@@ -22,7 +23,24 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 
 # The raw corpus is READ-ONLY. Nothing in this project may write beneath it.
-DATA_ROOT = Path("WU-SAHZU-EMU-Video/dataset")
+# [DECISION] This project lives in its own directory, separate from the corpus, so a
+#   bare relative path resolves against the wrong place. Candidates are tried in
+#   order; set VSVIG_DATA_ROOT to override.
+def _resolve_data_root() -> Path:
+    candidates = [
+        os.environ.get("VSVIG_DATA_ROOT"),
+        "WU-SAHZU-EMU-Video/dataset",
+        str(Path.home() / "Projects/VSViG/WU-SAHZU-EMU-Video/dataset"),
+    ]
+    for c in candidates:
+        if c and Path(c).exists():
+            return Path(c)
+    # Unresolved: return the conventional path so the failure surfaces at first use
+    # with a real filename in the message, rather than as an obscure import error.
+    return Path("WU-SAHZU-EMU-Video/dataset")
+
+
+DATA_ROOT = _resolve_data_root()
 LABEL_XLSX = DATA_ROOT / "Label.xlsx"
 
 PROCESSED_DIR = Path("processed_data")

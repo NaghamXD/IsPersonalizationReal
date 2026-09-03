@@ -108,9 +108,11 @@ def build_model(kind: str, patient: str, device):
 
 # ---------------------------------------------------------------- inference
 @torch.no_grad()
-def run_inference(model, activation, manifest_path, device, batch_size=32, limit=None):
+def run_inference(model, activation, manifest_path, device, batch_size=32, limit=None,
+                  data_folder=None):
     """-> {source_id: (t_start_s[], score[], label[])}"""
-    ds = VSViGDataset(config.PROCESSED_DIR, manifest_path, eval_mode=True)
+    ds = VSViGDataset(data_folder or config.PROCESSED_DIR, manifest_path,
+                      eval_mode=True)
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=0)
 
     buckets = defaultdict(lambda: ([], [], []))
@@ -132,7 +134,8 @@ def run_inference(model, activation, manifest_path, device, batch_size=32, limit
 
 
 # ---------------------------------------------------------------- per fold
-def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None):
+def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None,
+                  data_folder=None):
     patient = patient.lower()
     model, activation, ckpt = build_model(kind, patient, device)
 
@@ -144,7 +147,17 @@ def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None)
             f"(continuous non-overlapping sliding window); until that exists you are "
             f"scoring TRAINING-strided clips, which overstates latency performance.")
 
-    by_source = run_inference(model, activation, manifest_path, device, limit=limit)
+    if data_folder is None:
+        # Test clips live beside their own manifest; training clips live in the shared
+        # processed_data root. Infer from where the manifest sits.
+        parent = Path(manifest_path).parent
+        data_folder = parent if (parent / "patches").exists() else config.PROCESSED_DIR
+    if Path(data_folder) == Path(config.PROCESSED_DIR):
+        print("[warn] scoring TRAINING-strided clips (ictal/transition overlap by 4 s). "
+              "Latency and FDR/h from these are optimistic -- run "
+              "scripts/extract_test_clips.py and pass --data-folder for real numbers.")
+    by_source = run_inference(model, activation, manifest_path, device, limit=limit,
+                              data_folder=data_folder)
 
     results = []
     for source, (t, s, _y) in sorted(by_source.items()):
@@ -163,6 +176,10 @@ def main():
                     help="Clip manifest to score. Defaults to the fold's val_ file; "
                          "point at the Stage 3 sliding-window manifest for real "
                          "latency and FDR/h numbers.")
+    ap.add_argument("--data-folder", type=str, default=None,
+                    help="Root holding patches/ and kpts/. Defaults to the manifest's "
+                         "own directory when that looks like a clip store, else "
+                         "config.PROCESSED_DIR.")
     ap.add_argument("--limit", type=int, default=None, help="smoke-test clip cap")
     ap.add_argument("--out", type=str, default=None)
     args = ap.parse_args()
@@ -189,7 +206,8 @@ def main():
             continue
         try:
             res, ckpt, manifest = evaluate_fold(p, args.model, onsets, device,
-                                                args.clips, args.limit)
+                                                args.clips, args.limit,
+                                                args.data_folder)
         except (FileNotFoundError, NotImplementedError) as e:
             print(f"[skip] {p}: {e}")
             skipped.append({"patient": p, "reason": str(e)})
