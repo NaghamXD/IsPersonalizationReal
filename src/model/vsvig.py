@@ -250,12 +250,19 @@ class STViG(nn.Module):
         self.pos_emb = opt.pos_emb
 
         # Positional Embedding setup
+        # Keypoint channel count is configuration, not a literal. The 6fca412 code
+        # hard-coded 3 here while its dataset yielded 2, so the first forward pass
+        # died on a channel mismatch. Driving both from one value removes that class
+        # of bug. 2 = (x, y), which is what the paper's Stem(x_it, y_it) describes;
+        # 3 additionally carries pose confidence.
+        kpt_channels = getattr(opt, 'kpt_channels', 2)
+        self.kpt_channels = kpt_channels
         if opt.pos_emb == 'add':
-            ch4stem = output_channels[0] - 3 # Reserve 3 channels for coord
+            ch4stem = output_channels[0] - kpt_channels  # reserve channels for coords
         else:
             ch4stem = output_channels[0]
-        self.stem = Stem(input_dim=3, output_dim=ch4stem) # B T P C
-        self.stem_pe = Stem_pe(input_dim=3, output_dim=ch4stem)
+        self.stem = Stem(input_dim=3, output_dim=ch4stem)  # 3 = RGB, unrelated
+        self.stem_pe = Stem_pe(input_dim=kpt_channels, output_dim=ch4stem)
         
         self.in_channels = output_channels[0]
         # Original: self.backbone = []
@@ -350,12 +357,18 @@ def VSViG_base(pretrained=False, **kwargs):
             self.output_channels = [24,48,96,192] # *2 expansion = [48, 96, 192, 384]
             # Load dynamic partition file safely
             if os.path.exists(PATH_TO_DYNAMIC_PARTITIONS):
-                self.dynamic_point_order = torch.load(PATH_TO_DYNAMIC_PARTITIONS)
+                try:
+                    self.dynamic_point_order = torch.load(
+                        PATH_TO_DYNAMIC_PARTITIONS, map_location='cpu', weights_only=True)
+                except Exception:
+                    self.dynamic_point_order = torch.load(
+                        PATH_TO_DYNAMIC_PARTITIONS, map_location='cpu', weights_only=False)
             else:
                 print("⚠️ Warning: Dynamic partition file not found. Using default order.")
                 self.dynamic_point_order = None
             self.expansion = 2
             self.pos_emb = 'stem'
+            self.kpt_channels = kwargs.get('kpt_channels', 2)
     opt = OptInit(**kwargs)
     model = STViG(opt)
     return model
@@ -369,12 +382,18 @@ def VSViG_light(pretrained=False, **kwargs):
             self.output_channels = [12,24,48,96] # *2 expansion = [24, 48, 96, 192] Matches Light
             # Load dynamic partition file safely
             if os.path.exists(PATH_TO_DYNAMIC_PARTITIONS):
-                self.dynamic_point_order = torch.load(PATH_TO_DYNAMIC_PARTITIONS)
+                try:
+                    self.dynamic_point_order = torch.load(
+                        PATH_TO_DYNAMIC_PARTITIONS, map_location='cpu', weights_only=True)
+                except Exception:
+                    self.dynamic_point_order = torch.load(
+                        PATH_TO_DYNAMIC_PARTITIONS, map_location='cpu', weights_only=False)
             else:
                 print("⚠️ Warning: Dynamic partition file not found. Using default order.")
                 self.dynamic_point_order = None
             self.expansion = 2
             self.pos_emb = 'stem'
+            self.kpt_channels = kwargs.get('kpt_channels', 2)
     opt = OptInit(**kwargs)
     model = STViG(opt)
     return model

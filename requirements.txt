@@ -1,0 +1,14 @@
+# Minimum-version constraints, not exact pins: this file was authored in a sandbox
+# without torch, so the true working set could not be captured from a live install.
+#
+# Run  `python scripts/capture_env.py`  on the training machine to write
+# environment_lock.txt with exact resolved versions. THAT file is the reproducibility
+# record; this one is the install recipe.
+torch>=2.2
+numpy>=1.24
+pandas>=2.0
+opencv-python>=4.8
+openpyxl>=3.1
+matplotlib>=3.7
+scipy>=1.11
+statsmodels>=0.14   # Poisson GLM with log-exposure offset for the section 3.5 test

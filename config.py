@@ -1,0 +1,341 @@
+"""Single source of truth for every constant this project's methodology specifies.
+
+Nothing downstream should hard-code a number that appears here. If the methodology
+draft and this file disagree, one of them is wrong and that is a bug worth raising.
+
+PROVENANCE TAGS -- every value carries one. Do not silently promote an inference
+to a fact; that distinction is the whole point of this file.
+
+  [PAPER]    Stated explicitly in Xu et al., "VSViG", ECCV 2024.
+  [METHOD]   Stated in Methodology_draft_updated_3.sep.docx.
+  [INFERRED] Not stated in either; derived because the source is silent or
+             self-contradictory. The reasoning is given inline.
+  [DECISION] Our deliberate choice, recorded here so it can never be mistaken
+             for something we are citing.
+"""
+
+from pathlib import Path
+
+# =============================================================================
+# PATHS
+# =============================================================================
+REPO_ROOT = Path(__file__).resolve().parent
+
+# The raw corpus is READ-ONLY. Nothing in this project may write beneath it.
+DATA_ROOT = Path("WU-SAHZU-EMU-Video/dataset")
+LABEL_XLSX = DATA_ROOT / "Label.xlsx"
+
+PROCESSED_DIR = Path("processed_data")
+PATCHES_DIR = PROCESSED_DIR / "patches"
+KPTS_DIR = PROCESSED_DIR / "kpts"
+LABELS_JSON = PROCESSED_DIR / "labels.json"
+FOLDS_DIR = PROCESSED_DIR / "folds"
+POOLS_DIR = PROCESSED_DIR / "pools"
+
+# Test-time clips live apart from training clips on purpose: they are extracted
+# with a different stride and must never be mixed into a training manifest.
+TEST_CLIPS_DIR = PROCESSED_DIR / "test_sliding"
+
+OUTPUTS_DIR = Path("outputs")
+BASELINE_CKPT_ROOT = OUTPUTS_DIR / "lopo" / "checkpoints"
+HYPER_CKPT_ROOT = OUTPUTS_DIR / "lopo_hypernetwork" / "checkpoints"
+RESULTS_DIR = OUTPUTS_DIR / "results"
+
+POSE_WEIGHTS = Path("pose.pth")
+DYNAMIC_PARTITION_FILE = Path("dy_point_order.pt")
+
+# =============================================================================
+# COHORT
+# =============================================================================
+# [PAPER] The corpus holds 14 patients and 33 annotated seizures.
+ALL_PATIENTS = [f"pat{i:02d}" for i in range(1, 15)]
+
+# [METHOD] Subjects with under one minute of pre-EEG baseline are excluded,
+#          leaving 11 patients and 24 seizures.
+# [DECISION] "Under one minute" is measured as the SUM of `EEG onset` offsets
+#          across a patient's annotated seizures -- i.e. total interictal video
+#          available before any seizure begins.
+# [DECISION] A patient below that threshold is RESCUED if separate seizure-free
+#          footage supplies enough interictal video to build Pool A.
+#
+# Measured totals (seconds of pre-EEG footage), all 14:
+#   pat01 4204  pat02 3316  pat03   17  pat04   14  pat05   21  pat06  364
+#   pat07  481  pat08 2020  pat09  388  pat10    8  pat11   61  pat12   27
+#   pat13   37  pat14   32
+#
+# NOTE -- an honest record of a real tension: seven patients fall below 60 s,
+# not three. pat03 and pat04 are rescued by free.mp4 / no-Sz2P.mp4 (11.0 min and
+# 45.6 min respectively -- verified from the video headers). pat13 (37 s) and
+# pat14 (32 s) fall below the threshold and have NO supplementary footage, yet
+# are retained by explicit instruction so the cohort lands on the 11/24 the
+# methodology specifies. They are kept, flagged, and their scarcity is handled
+# by EQUALISING Pool A across the whole cohort (see POOL_A_SIZE).
+EXCLUDED_PATIENTS = ["pat05", "pat10", "pat12"]
+COHORT = [p for p in ALL_PATIENTS if p not in EXCLUDED_PATIENTS]  # 11 patients
+assert len(COHORT) == 11, f"cohort must be 11 patients, got {len(COHORT)}"
+
+# [PAPER] Table 6 semiology. P = partial (focal). PG = partial -> generalized
+#         tonic-clonic. Used for stratified validation-pair selection.
+SEMIOLOGY = {
+    "pat01": "PG", "pat02": "PG", "pat03": "PG", "pat04": "P",  "pat05": "PG",
+    "pat06": "P",  "pat07": "PG", "pat08": "P",  "pat09": "P",  "pat10": "P",
+    "pat11": "P",  "pat12": "P",  "pat13": "PG", "pat14": "PG",
+}
+
+# =============================================================================
+# CLIP GEOMETRY
+# =============================================================================
+CLIP_SECONDS = 5.0        # [PAPER] "a duration of 5 s"
+CLIP_FRAMES = 30          # [PAPER] 150 raw frames subsampled to 30 -> 6 Hz
+N_JOINTS = 15             # [PAPER] 18 OpenPose joints minus l_ear, r_ear, neck
+PATCH_SIZE = 32           # [PAPER] "a size of 32x32 (HxW) for extracted patches"
+FUSION_SIZE = 128         # [INFERRED] crop taken at 128x128 then resized to 32.
+                          #   The paper gives no intermediate size; this is the
+                          #   base repo's choice, preserved for continuity.
+GAUSSIAN_SIGMA_SCALE = 0.3  # [PAPER] "sigma of gaussian kernel is 0.3", clarified
+                            #   as 0.3 *relative to the patch size*.
+GAUSSIAN_SIGMA = FUSION_SIZE * GAUSSIAN_SIGMA_SCALE
+
+# [PAPER] OpenPose index order, regrouped into VSViG's 5 partitions of 3 joints:
+#   head(nose,eyes) | right arm | left arm | right leg | left leg
+JOINT_INDICES = [0, 14, 15, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+
+# [DECISION] Frame rate is READ PER VIDEO, never assumed. Measured values in this
+#   corpus are 29.97 for 37 files and 30.00 for 4 -- the 25.0 previously hard-coded
+#   in the evaluator was wrong and silently corrupted every latency figure.
+ASSUME_FPS = None
+
+# =============================================================================
+# KEYPOINT NORMALISATION
+# =============================================================================
+# [PAPER] Positional embedding is Stem(x_it, y_it) -- coordinates only, 2 channels.
+# [METHOD] "raw skeleton coordinates are centered around the mid-hip joint and
+#          normalized by torso length prior to any modeling."
+#
+# These disagree with the base repo, which divides x by 1920 and y by 1080 and
+# does no centering at all. Frame-relative normalisation leaves the signature
+# sensitive to where the patient lies in the bed and where the camera sits --
+# exactly the nuisance variation the methodology's centering is meant to remove.
+KPT_NORMALISATION = "midhip_torso"   # "midhip_torso" | "frame"  [METHOD]
+FRAME_WIDTH = 1920                   # [PAPER] Bosch NDP-4502-Z12, 1920x1080
+FRAME_HEIGHT = 1080
+MIDHIP_JOINTS = (9, 12)              # indices into the 15-joint order: R hip, L hip
+TORSO_JOINTS = (3, 6)                # R shoulder, L shoulder (mid-shoulder to mid-hip)
+TORSO_LENGTH_FLOOR = 1e-3            # [DECISION] guard against a degenerate skeleton
+# [DECISION] Fallbacks when a frame has no usable hips/shoulders. A pose failure must
+#   degrade gracefully, never emit inf/NaN into the backbone.
+TORSO_FALLBACK_FRAC = 0.25   # fallback torso length as a fraction of frame height
+KPT_CLAMP = 5.0              # clamp normalised coords to +/- this many torso lengths
+MISSING_JOINT_SENTINEL = -1.0  # preprocess writes -1 for an unresolved joint
+
+# [DECISION] Stem_pe consumes 2 channels (x, y), matching the paper. The base repo
+#   instantiates Stem_pe(input_dim=3) while its dataset yields 2 channels, which is
+#   why 6fca412 crashes on its first forward pass. Confidence is a pose-detector
+#   artifact, not a spatial coordinate, so it does not belong in a positional
+#   embedding -- but it IS informative about imputed joints, so the 3-channel
+#   variant stays available as a one-line ablation rather than being discarded.
+KPT_CHANNELS = 2                     # 2 = (x,y) [PAPER] | 3 = (x,y,confidence)
+
+# =============================================================================
+# LABELLING
+# =============================================================================
+# [PAPER] Interictal 0, ictal 1, transition rising "in an exponential function".
+# [DECISION] The paper never writes the function. k=5 and the (e^kx - 1)/(e^k - 1)
+#   normalisation are this project's choice, inherited from the base repo.
+TRANSITION_RAMP_K = 5.0
+# [PAPER] "probabilities of video clips depend on the end frame of video clips
+#          lying in which period" -- the label is evaluated at the clip's END.
+LABEL_AT_CLIP_END = True
+
+# =============================================================================
+# EXTRACTION WINDOWS AND STRIDES
+# =============================================================================
+INTERICTAL_LOOKBACK_S = 1800.0   # [PAPER] "<30 min before EEG onset"
+ICTAL_LOOKAHEAD_S = 120.0        # [PAPER] "<2 min after clinical onset"
+
+# [METHOD] Extraction is bifurcated by phase. Training folds use overlapping
+#   ictal/transition clips as augmentation; test evaluation forbids overlap.
+TRAIN_STRIDE_ICTAL_S = 1.0        # [PAPER] "4 s overlappings" on a 5 s window
+TRAIN_STRIDE_TRANSITION_S = 1.0
+TRAIN_STRIDE_INTERICTAL_S = 5.0   # [PAPER] interictal extracted "without overlapping"
+TEST_STRIDE_S = 5.0               # [METHOD] continuous sliding window, no overlap
+
+# =============================================================================
+# POOL A / POOL B
+# =============================================================================
+# [METHOD] Pool A holds N <= 20 interictal clips, stratified-uniformly sampled
+#   across the patient's whole interictal timeline.
+# [DECISION] N is FIXED AT 6 for every patient, not capped at 20.
+#
+#   Why: available interictal volume spans 6 to 548 non-overlapping clips across
+#   the retained cohort (pat14 has 6, pat04 has 548). A variable N makes sigma far
+#   noisier for scarce patients than for abundant ones, so D_p -- the distance from
+#   the cohort centroid that the whole of section 3.5 correlates against -- would
+#   partly measure estimation noise instead of behavioural atypicality. Equalising N
+#   costs precision uniformly and buys comparability, which is what the hypothesis
+#   test actually requires. 6 is the largest N every retained patient can supply.
+POOL_A_SIZE = 6
+POOL_A_SAMPLING = "stratified_uniform"   # [METHOD] NOT a sorted prefix; the base
+                                         #   repo's interictal[:20] was a lexicographic
+                                         #   artifact ("_1000" sorts before "_200").
+POOL_A_MIN_CONFIDENCE = 6                # below this, z is flagged low-confidence
+
+# [METHOD] "A strict temporal guardrail guarantees that no overlapping windows
+#          exist between Pool A and Pool B."
+POOL_GUARDRAIL_S = CLIP_SECONDS          # windows within this of a Pool A clip are
+                                         # excluded from Pool B, per source video
+
+# =============================================================================
+# SIGNATURE (z_behavior)
+# =============================================================================
+# [METHOD] Features come from "the early frozen blocks (Stages 0-2)".
+# [INFERRED] The draft also states X in R^{15 x 30 x 384}, which exists nowhere in
+#   the network: stage 2 emits 192 channels and T is downsampled 30->15->8->4.
+#   Reading the constructor, the output after stages 0,1,2 is C'=192, T'=8, P=15.
+#   Confirmed empirically by scripts/verify_shapes.py.
+SIGNATURE_STAGE_CUT = 2          # inclusive, 0-indexed: stages 0,1,2
+SIGNATURE_CHANNELS = 192         # C' -- verified, not assumed
+CONTEXT_DIM = 128                # [METHOD] z_behavior in R^128
+PROJECTOR_IN_DIM = 2 * SIGNATURE_CHANNELS   # [mu || sigma] = 384, NOT 768
+PROJECTOR_SEED = 42              # [METHOD] untrained, frozen random projection
+
+# [METHOD] sigma is the temporal standard deviation, taken BEFORE spatial pooling,
+#   so it captures joint velocity rather than inter-clip posture drift.
+# [DECISION] Across the N Pool A clips: compute mu and sigma per clip, then average
+#   both across clips. Concatenating clips into one time axis would inject spurious
+#   velocity spikes at the seams between clips drawn hours apart.
+SIGMA_AXIS = "temporal_before_spatial_pool"
+POOL_A_AGGREGATION = "mean_of_per_clip"
+SIGMA_UNBIASED = False           # [METHOD] biased estimator, so N=1 gives 0 not NaN
+
+# [METHOD] Signature stability gate, section 3.2.3.
+STABILITY_RATIO_THRESHOLD = 2.5
+STABILITY_N_BLOCKS = 3           # [DECISION] Pool A of 6 splits into 3 blocks of 2
+
+# =============================================================================
+# HYPERNETWORK
+# =============================================================================
+HN_TRUNK_HIDDEN = 128            # [METHOD] Linear(128->128) x2
+HN_TRUNK_ACTIVATION = "leaky_relu"
+HN_LEAKY_SLOPE = 0.1             # [METHOD] LeakyReLU(alpha=0.1)
+HN_BOTTLENECK = 32               # [METHOD] 32-d inner compression for A
+
+# [METHOD] (name, out_channels, flattened_in, rank)
+HN_TARGET_SPECS = [
+    ("stage3_block0_conv2", 192, 1728, 4),
+    ("stage3_block1_conv2", 192, 1728, 4),
+    ("stage3_block2_conv2", 192, 1728, 4),
+    ("fc0", 256, 384, 4),
+    ("fc3", 1, 256, 1),
+]
+HN_USE_BASE = True               # [METHOD] A_p = A_base + A_hyper(z)
+HN_Z_JITTER_SIGMA = 0.15         # [METHOD] training only
+HN_DELTA_CLIP_RATIO = 0.5        # [METHOD] rho: ||dW||_F <= rho * ||W_base||_F
+
+# [INFERRED] The draft writes N(0, d_in^-1 * 1e-2) for A_base. Read as a variance
+#   that is 1e-2/d_in; read as a std it is 1e-4/d_in. The base repo implements the
+#   latter. Kept, and flagged: a 100x difference either way.
+HN_A_BASE_STD_SCALE = 1e-2
+
+# =============================================================================
+# STEP 1 -- BACKBONE OPTIMISATION
+# =============================================================================
+S1_LOSS = "huber"                # [METHOD] Huber for training
+S1_HUBER_DELTA = 1.0
+S1_SELECTION_METRIC = "mse"      # [DECISION] MSE for checkpoint selection, so the
+                                 #   number stays comparable to the paper's RMSE
+S1_OPTIMIZER = "adamw"
+S1_LR = 1e-4                     # [PAPER] 1e-4
+S1_WEIGHT_DECAY = 0.05
+S1_BATCH_SIZE = 16
+S1_MAX_EPOCHS = 50               # [DECISION] compute ceiling
+S1_VAL_EVERY = 1                 # [DECISION] every epoch, so patience is meaningful
+                                 #   within the 50-epoch cap
+S1_PATIENCE = 5
+S1_GRAD_CLIP = 1.0
+S1_SAMPLER_FRACTIONS = {"interictal": 0.45, "ictal": 0.45, "transition": 0.10}
+
+# =============================================================================
+# STEP 3 -- HYPERNETWORK OPTIMISATION
+# =============================================================================
+S3_LOSS = "bce_with_logits"      # [METHOD] on un-sigmoided logits
+S3_OPTIMIZER = "adamw"
+S3_WARMUP_STEPS = 300            # [METHOD] linear 1e-5 -> 1e-3
+S3_WARMUP_START_LR = 1e-5
+S3_TARGET_LR = 1e-3
+S3_MIN_LR = 1e-6                 # [METHOD] cosine decay floor
+S3_WEIGHT_DECAY = 1e-5
+S3_BATCH_SIZE = 8                # must be even: batches are exactly 50/50
+S3_MAX_EPOCHS = 100              # [DECISION] compute ceiling
+S3_PATIENCE = 5                  # [METHOD] 5 epochs without improvement
+S3_GRAD_CLIP = 1.0
+S3_EXCLUDE_TRANSITION = True     # [METHOD] transition clips excluded from step 3
+
+# =============================================================================
+# FOLD STRUCTURE
+# =============================================================================
+N_INTERNAL_VAL_PATIENTS = 2      # [METHOD] 1 test / 2 val / 8 train
+INTERNAL_VAL_STRATIFY = "semiology"   # [METHOD] one P and one PG per fold
+FOLD_SEED = 42
+
+# =============================================================================
+# EVALUATION
+# =============================================================================
+ACCUM_WINDOW_S = 3.0             # [PAPER] tau = 3 s
+DECISION_THRESHOLD = 0.3         # [PAPER] DT = 0.3
+# [DECISION] The paper writes AP_t = sum(P_i). Summing ~6 sigmoid outputs against a
+#   threshold of 0.3 is near-trivially satisfied and cannot reproduce the reported
+#   latencies, so we use the mean. Recorded as ours, not as the paper's method.
+ACCUM_RULE = "mean"              # "mean" | "sum"
+
+# [DECISION] A clip covers [t, t+5]. Its prediction is attributed to the clip's END,
+#   because that is the earliest instant a real-time system could have emitted it.
+#   The paper never says which edge it used, and the choice shifts every reported
+#   latency by up to 5 s -- so it is recorded here rather than buried in the code.
+DETECTION_TIME_REF = "clip_end"   # "clip_end" | "clip_start" | "clip_center"
+
+# [METHOD] A seizure counts as detected if an alarm opens between EEG onset and the
+#   end of the evaluated ictal window. Alarms before EEG onset are false alarms.
+DETECTION_WINDOW_AFTER_CLINICAL_S = ICTAL_LOOKAHEAD_S
+
+REFRACTORY_S = 60.0              # [METHOD] merge alarms within 60 s into one event
+POST_ICTAL_EXCLUSION_S = 900.0   # [METHOD] 15 min after clinical onset excluded
+                                 #   from the FDR/h denominator. Note: this corpus
+                                 #   holds almost no post-ictal footage, so the rule
+                                 #   rarely binds -- kept for correctness.
+
+# [METHOD] Hours at risk exclude the pre-ictal transition and the ictal period.
+FDR_EXCLUDE_TRANSITION = True
+FDR_EXCLUDE_ICTAL = True
+
+# [METHOD] section 3.5 is fitted as a Poisson rate model with a log-exposure
+#   offset, not a Pearson correlation on raw ratios -- exposure spans three orders
+#   of magnitude across this cohort (pat13 has 37 s at risk, pat04 has 45.6 min),
+#   so a raw ratio would be dominated by recording length.
+HYPOTHESIS_MODEL = "poisson_log_exposure"
+HYPOTHESIS_ALPHA = 0.05
+HYPOTHESIS_REPORT_ALSO = ["pearson", "spearman", "bootstrap_ci"]
+
+# =============================================================================
+# ABLATION MICRO-COHORT (pre-registered, hypothesis-independent)
+# =============================================================================
+# [DECISION] Three folds, chosen on seizure count and semiology ONLY -- never on
+#   D_p, which depends on the signature we are still building and is the axis the
+#   hypothesis is measured along. Fixed here BEFORE any z is computed.
+#
+#   Caveat worth stating: no PG patient in the retained cohort has more than 2
+#   seizures, so the "high seizure count FBTC" arm is the largest available PG.
+ABLATION_FOLDS = ["pat02", "pat04", "pat09"]
+#   pat02  PG, 2 seizures, 3316 s interictal -- largest PG by count and volume
+#   pat04  P,  1 seizure,  2736 s interictal -- lowest count, focal, data-rich
+#   pat09  P,  3 seizures,  388 s interictal -- mid-range volume, typical case
+#
+# [DECISION] pat13 and pat14 are the scarcity stress cases (37 s / 32 s). They are
+#   not in the ablation triple but every pipeline change gets a smoke check on them,
+#   because they are where a Pool A of 6 is most likely to break.
+SCARCITY_STRESS_FOLDS = ["pat13", "pat14"]
+
+# =============================================================================
+# SEEDS
+# =============================================================================
+GLOBAL_SEED = 1337

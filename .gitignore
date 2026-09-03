@@ -34,3 +34,7 @@ processed_data/kpts/
 # Leftover temp files from evaluation
 temp_eval.json
 temp_fdr.json
+
+# Audit scratch (extracted paper text) and generated env lock
+_audit_tmp/
+environment_lock.txt
