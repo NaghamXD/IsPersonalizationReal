@@ -80,7 +80,11 @@ def normalize_skeleton(kpts: Tensor, mode: str | None = None) -> Tensor:
         # frames that do have them. Median, not mean, so one wild pose failure in a
         # 30-frame clip cannot drag the origin across the image.
         if hip_ok.any():
-            fallback_origin = midhip[hip_ok].median(dim=0).values
+            # torch.quantile(., 0.5), NOT torch.median: torch's median returns the
+            # lower of the two middle values for an even count, while numpy averages
+            # them. Both are defensible as a robust centre, but they must agree with
+            # the reference implementation, and numpy's is the standard definition.
+            fallback_origin = torch.quantile(midhip[hip_ok], 0.5, dim=0)
         else:
             fallback_origin = torch.tensor(
                 [config.FRAME_WIDTH / 2.0, config.FRAME_HEIGHT / 2.0],
@@ -90,7 +94,7 @@ def normalize_skeleton(kpts: Tensor, mode: str | None = None) -> Tensor:
         torso = torch.linalg.norm(midsh - midhip, dim=-1)
         torso_ok = hip_ok & sh_ok & (torso > config.TORSO_LENGTH_FLOOR)
         if torso_ok.any():
-            fallback_scale = torso[torso_ok].median()
+            fallback_scale = torch.quantile(torso[torso_ok], 0.5)
         else:
             fallback_scale = torch.tensor(
                 config.TORSO_FALLBACK_FRAC * config.FRAME_HEIGHT,

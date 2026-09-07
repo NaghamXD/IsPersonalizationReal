@@ -50,12 +50,27 @@ def check_config():
     print(f"  cohort={config.COHORT}")
 
 
+def _run(script, tail=8):
+    """Run a child script, echoing BOTH streams. Capturing stdout only -- as this did
+    originally -- hides the traceback that says what actually broke, which turns a
+    precise failure into 'something went wrong'."""
+    r = subprocess.run([sys.executable, script], cwd=ROOT, capture_output=True, text=True)
+    for line in (r.stdout or "").strip().splitlines()[-tail:]:
+        print("  " + line)
+    if r.returncode != 0:
+        err = (r.stderr or "").strip()
+        if err:
+            print("  --- stderr ---")
+            for line in err.splitlines()[-25:]:
+                print("  " + line)
+    return r
+
+
 def run_pytests():
     for t in ["tests/test_normalize.py", "tests/test_eval.py", "tests/test_windows.py"]:
-        r = subprocess.run([sys.executable, t], cwd=ROOT, capture_output=True, text=True)
-        print("  " + "\n  ".join(r.stdout.strip().splitlines()[-3:]))
+        r = _run(t, tail=3)
         if r.returncode != 0:
-            raise AssertionError(f"{t} failed:\n{r.stdout}\n{r.stderr}")
+            raise AssertionError(f"{t} failed (see stderr above)")
 
 
 def run_verify_shapes():
@@ -63,12 +78,11 @@ def run_verify_shapes():
         import torch  # noqa: F401
     except ModuleNotFoundError as e:
         raise Skip(f"{e} -- run this on the training machine") from None
-    r = subprocess.run([sys.executable, "scripts/verify_shapes.py"],
-                       cwd=ROOT, capture_output=True, text=True)
-    print("  " + "\n  ".join(r.stdout.strip().splitlines()[-8:]))
+    r = _run("scripts/verify_shapes.py", tail=30)
     if r.returncode != 0:
-        raise AssertionError("verify_shapes.py failed -- config's architectural "
-                             "constants disagree with the actual model")
+        raise AssertionError("verify_shapes.py failed -- see output above. Either a "
+                             "config constant disagrees with the real model, or the "
+                             "forward pass raised.")
 
 
 def load_one_clip():
