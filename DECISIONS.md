@@ -183,6 +183,40 @@ remaining Pool A / Pool B split.
 Epoch ceilings: 50 for the backbone, 100 for the hypernetwork, validation every epoch
 so the patience counter is meaningful inside the cap.
 
+## D14. Pool A time span is not equalised — open, decide when building §3.2.3
+
+**Observed after Stage 4, not yet decided.**
+
+Every patient gets 20 clips, so the estimation *precision* of μ and σ is now equal —
+that was the point of the cohort revision (D2) and it worked. But the **timeline those
+20 clips span** still varies 24-fold:
+
+| | pat01 | pat02 | pat04 | pat08 | pat03 | pat07 | pat06 | pat09 |
+|---|---|---|---|---|---|---|---|---|
+| Pool A span | 3570 s | 2816 s | 1775 s | 1190 s | 655 s | 470 s | 260 s | **150 s** |
+| Pool A sources | 2 | 2 | 2 | 3 | 2 | **1** | 3 | 3 |
+
+pat09's signature samples 2.5 minutes of the patient's stay; pat01's samples an hour.
+
+This matters specifically for the §3.2.3 stability ratio, whose denominator is
+intra-patient variance across temporal blocks. A patient whose Pool A spans 150 s will
+look artificially **stable** — its four blocks are minutes apart, not hours — so the
+ratio is not comparable across patients, and a pooled ≥ 2.5 threshold would be
+measuring recording length as much as signature stability.
+
+**Proposed:** report the stability ratio **per patient alongside its Pool A span**
+rather than pooling to a single number, and treat the ≥ 2.5 gate per patient. To be
+settled when §3.2.3 is implemented.
+
+Two further consequences of the same heterogeneity, worth carrying into the write-up:
+
+- **pat07's Pool A is single-source.** Its Sz1 recording contains zero interictal
+  windows (EEG onset at 4 s), so stratification across sources degenerates to one
+  stratum and the signature comes entirely from Sz2.
+- **pat04's Pool A comes entirely from supplementary footage** (`free.mp4`,
+  `no-Sz2P.mp4`); its seizure recording contributed none of the 20.
+
+
 ## D13. Environment
 
 **Decided:** conda supplies the interpreter only; every library comes from PyPI via
@@ -206,6 +240,8 @@ earlier LOPO training ran on CPU.
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
   dry-run only.
 - **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
+- **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is
+  applied per patient or pooled. Blocking for Stage 5's gate.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
   what exposure floor, once real FDR/h numbers exist.
 - **A_base initialisation** — the draft's `N(0, d_in⁻¹ × 10⁻²)` is ambiguous between a
