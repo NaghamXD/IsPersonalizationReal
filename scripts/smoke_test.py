@@ -93,7 +93,8 @@ def _run(script, tail=8):
 
 
 def run_pytests():
-    for t in ["tests/test_normalize.py", "tests/test_eval.py", "tests/test_windows.py"]:
+    for t in ["tests/test_normalize.py", "tests/test_eval.py", "tests/test_windows.py",
+                     "tests/test_pools.py"]:
         r = _run(t, tail=3)
         if r.returncode != 0:
             raise AssertionError(f"{t} failed (see stderr above)")
