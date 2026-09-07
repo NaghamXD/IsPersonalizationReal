@@ -38,3 +38,4 @@ temp_fdr.json
 # Audit scratch (extracted paper text) and generated env lock
 _audit_tmp/
 environment_lock.txt
+environment_lock.yml

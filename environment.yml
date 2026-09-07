@@ -1,0 +1,52 @@
+# Conda environment for IsPersonalizationReal.
+#
+# This file CREATES the environment and is deliberately loosely pinned, so the solver
+# can find a working set on your machine. It is not the reproducibility record --
+# `python scripts/capture_env.py` writes that, with exact resolved versions, and THAT
+# is what belongs beside a set of results.
+#
+# WHY TORCH IS NOT LISTED HERE
+# On Apple Silicon the MPS-enabled build is most reliably obtained from the PyPI
+# wheels, so torch is installed with pip after the env is created (see SETUP.md).
+# Everything that shares a C ABI with numpy -- opencv, scipy, pandas -- comes from
+# conda-forge together, so the solver keeps them consistent; mixing a pip opencv with
+# a conda numpy is a classic source of segfaults that look like data bugs.
+#
+#   conda env create -f environment.yml
+#   conda activate ispersonalizationreal
+#   pip install "torch>=2.2"
+#   python scripts/smoke_test.py
+#   python scripts/capture_env.py
+#
+# Rename the env by editing `name:` below if you prefer something shorter.
+
+name: ispersonalizationreal
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11          # torch, opencv and statsmodels all have solid 3.11 support
+
+  # --- numeric core: kept on one channel so the ABI stays consistent ---
+  - numpy>=1.24
+  - scipy>=1.11          # Spearman, bootstrap CIs for the section 3.5 reporting
+  - pandas>=2.0
+  - openpyxl>=3.1        # reads Label.xlsx
+
+  # --- video and pose preprocessing ---
+  - opencv>=4.8          # decoding, patch crops, heatmap argmax
+
+  # --- modelling and statistics ---
+  - statsmodels>=0.14    # Poisson GLM with log-exposure offset (section 3.5)
+
+  # --- figures ---
+  - matplotlib>=3.7
+
+  # --- tooling ---
+  - pytest>=7.4
+  - pip
+  # No `pip:` block: torch is installed separately and deliberately, so that a failed
+  # MPS build is an obvious, isolated failure rather than a silent fallback to CPU
+  # buried inside an env solve. (An empty pip: list also makes some conda versions
+  # error out on `env create`.)
