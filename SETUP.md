@@ -5,17 +5,16 @@
 ```bash
 conda env create -f environment.yml
 conda activate ispersonalizationreal
-pip install "torch>=2.2"          # MPS build comes from PyPI on Apple Silicon
 ```
 
-Torch is installed separately on purpose. If the MPS build fails it should fail
-loudly and on its own, not disappear into a conda solve and leave you training on
-CPU without noticing.
+Conda supplies the **interpreter only**. Every library comes from PyPI via
+`requirements.txt`, so there is one dependency list and one binary source. See
+*Troubleshooting* below for why that matters.
 
 Verify, in this order:
 
 ```bash
-python -c "import torch; print(torch.__version__, torch.backends.mps.is_available())"
+python scripts/check_openmp.py    # duplicate-runtime check; run this FIRST
 python scripts/smoke_test.py      # config, unit tests, model shapes, one real clip
 python scripts/capture_env.py     # writes environment_lock.{txt,yml}
 ```
@@ -63,3 +62,44 @@ the resulting latency and FDR/h are optimistic.
   `environment_lock.{txt,yml}` record one. Only the latter belongs beside results.
 - Every run writes a manifest with git commit, seed, device and a full config
   snapshot next to its outputs.
+
+## Troubleshooting
+
+### `OMP: Error #15: Initializing libomp.dylib, but found libomp.dylib already initialized`
+
+Two OpenMP runtimes have been loaded into one process. On macOS this happens when the
+numeric stack (numpy, scipy, opencv) comes from conda-forge, which pulls in
+`llvm-openmp`, while torch comes from pip and carries its own `libomp.dylib` inside
+the wheel.
+
+**Do not set `KMP_DUPLICATE_LIB_OK=TRUE`.** Its own documentation calls it unsafe,
+unsupported and able to "silently produce incorrect results". A pipeline whose outputs
+are probabilities feeding a clinical detection metric cannot absorb silently wrong
+numerics -- you would have no way to notice it had happened.
+
+Fix it by rebuilding so everything comes from one source:
+
+```bash
+conda deactivate
+conda env remove -n ispersonalizationreal
+conda env create -f environment.yml
+conda activate ispersonalizationreal
+python scripts/check_openmp.py
+```
+
+`check_openmp.py` imports numpy, scipy, cv2 and torch one at a time and prints the
+OpenMP images loaded after each. If the process aborts, the last line printed names
+the import that introduced the second copy.
+
+### MPS reports unavailable
+
+`capture_env.py` and `check_openmp.py` both report `mps_available` and `mps_built`.
+If MPS is missing, training silently falls back to CPU and a full LOPO run becomes
+impractically slow, so treat it as a blocker rather than a warning. Confirm you are on
+an arm64 interpreter:
+
+```bash
+python -c "import platform; print(platform.machine())"   # expect arm64, not x86_64
+```
+
+An `x86_64` result means the env is running under Rosetta and will never see MPS.
