@@ -178,6 +178,16 @@ TRAIN_STRIDE_TRANSITION_S = 1.0
 TRAIN_STRIDE_INTERICTAL_S = 5.0   # [PAPER] interictal extracted "without overlapping"
 TEST_STRIDE_S = 5.0               # [METHOD] continuous sliding window, no overlap
 
+# [METHOD] "Data Abundance Equalization via Algorithmic Expansion": supplementary
+#   seizure-free footage is sliced into non-overlapping 5 s windows "sampled uniformly
+#   across all available diurnal footage up to a strict cap of 40 clips per subject,
+#   preventing high-volume patients from dominating the training gradients."
+# [DECISION] UNIFORMLY across the whole file, not the first 40 windows. Taking a
+#   contiguous prefix would sample ~200 s from the start of a 30-minute recording,
+#   which is exactly the "isolated, transient activity" the methodology says to avoid.
+EXTRA_FOOTAGE_CAP = 40
+EXTRA_FOOTAGE_SAMPLING = "uniform"
+
 # =============================================================================
 # POOL A / POOL B
 # =============================================================================
