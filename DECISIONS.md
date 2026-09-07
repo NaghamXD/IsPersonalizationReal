@@ -266,11 +266,41 @@ adjoint would then be wrong rather than merely non-deterministic.
 finished. Once eight backbones exist, changing anything inside the model means
 retraining all eight for consistency — this was the cheapest possible moment.
 
+## D16. The decision threshold must be selected per fold, not inherited — OPEN
+
+**Raised by the first real evaluation, not yet decided.**
+
+`DT = 0.3` comes from the VSViG paper `[PAPER]`. It was tuned there for a model trained
+on that paper's distribution and evaluated on a within-patient random split. We have
+inherited the number and applied it to a differently-trained model on a
+patient-independent split, which is not obviously valid.
+
+The concrete problem: Step 1 trains under a 45/45/10 rebalanced sampler, so the model's
+implicit prior is near 0.5, while deployment is overwhelmingly interictal. A model whose
+outputs sit near its training prior clears `DT = 0.3` almost everywhere. The first pat01
+evaluation showed exactly that shape — sensitivity 1.0, L_EO ≈ 0, and 31 alarm events in
+40 minutes — which is a detector that never stops detecting.
+
+**Proposed:** treat DT as a fold-level hyperparameter chosen on the two INTERNAL
+VALIDATION patients, never on the held-out test patient. Selecting it on test would be
+tuning the operating point on the patient the result is about — the same class of leak
+the fold structure exists to prevent, one level up.
+
+An operating criterion has to be chosen with it, since sensitivity and FDR/h trade off:
+maximise sensitivity subject to an FDR/h ceiling, or minimise FDR/h subject to a
+sensitivity floor. That is a clinical judgement, not a statistical one.
+
+Whatever is chosen, DT must be **identical for the baseline and the adapted model**
+within a fold, or the section 3.5 comparison measures threshold placement rather than
+personalisation.
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
   dry-run only.
 - **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
+- **Decision threshold selection (D16)** — inherit 0.3, or select per fold on
+  the internal validation patients under a stated operating criterion.
 - **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is
   applied per patient or pooled. Blocking for Stage 5's gate.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against

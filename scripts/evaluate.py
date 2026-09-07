@@ -159,12 +159,49 @@ def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None,
     by_source = run_inference(model, activation, manifest_path, device, limit=limit,
                               data_folder=data_folder)
 
-    results = []
-    for source, (t, s, _y) in sorted(by_source.items()):
+    results, rows = [], []
+    for source, (t, s, y) in sorted(by_source.items()):
         eeg_s, clin_s = onsets.get(source, (None, None))
         results.append(evaluate_source(patient, source, t, s,
                                        eeg_s=eeg_s, clin_s=clin_s))
-    return results, str(ckpt), str(manifest_path)
+        for ti, si, yi in zip(t, s, y):
+            rows.append({"patient": patient, "source": source,
+                         "t_start_s": ti, "label": yi, "prob": si})
+    return results, str(ckpt), str(manifest_path), rows
+
+
+def probability_report(rows):
+    """What the model actually outputs, by true class.
+
+    Sensitivity, FDR/h and latency describe the DECISIONS. This describes the
+    PROBABILITIES underneath them, and it is what separates two very different
+    failures that produce similar-looking metrics: a model that has learned nothing
+    and emits one value everywhere, versus a model that discriminates but whose
+    operating threshold is set wrong. The first needs more training; the second needs
+    a different DT. You cannot tell them apart from FDR/h alone.
+    """
+    import numpy as np
+    out = {}
+    for name, keep in (("interictal", lambda y: y == 0.0),
+                       ("transition", lambda y: 0.0 < y < 1.0),
+                       ("ictal", lambda y: y == 1.0)):
+        p = np.array([r["prob"] for r in rows if keep(r["label"])])
+        if len(p) == 0:
+            continue
+        out[name] = {"n": int(len(p)), "mean": float(p.mean()),
+                     "p10": float(np.percentile(p, 10)),
+                     "p50": float(np.percentile(p, 50)),
+                     "p90": float(np.percentile(p, 90)),
+                     "frac_above_DT": float((p > config.DECISION_THRESHOLD).mean())}
+    if "interictal" in out and "ictal" in out:
+        # Rank separation: the probability that a random ictal clip scores above a
+        # random interictal one. 0.5 is chance. This is threshold-free, so it says
+        # whether the model discriminates at all, independent of where DT sits.
+        pi = np.array([r["prob"] for r in rows if r["label"] == 0.0])
+        pc = np.array([r["prob"] for r in rows if r["label"] == 1.0])
+        wins = (pc[:, None] > pi[None, :]).mean() + 0.5 * (pc[:, None] == pi[None, :]).mean()
+        out["auc_ictal_vs_interictal"] = float(wins)
+    return out
 
 
 def main():
@@ -198,27 +235,46 @@ def main():
     onsets = load_onsets()
     folds = config.COHORT if args.all_folds else [args.fold.lower()]
 
-    all_results, per_fold, skipped = [], {}, []
+    all_results, per_fold, skipped, all_rows = [], {}, [], []
     for p in folds:
         if p not in config.COHORT:
             print(f"[skip] {p} is not in the configured cohort "
                   f"(excluded: {config.EXCLUDED_PATIENTS})")
             continue
         try:
-            res, ckpt, manifest = evaluate_fold(p, args.model, onsets, device,
-                                                args.clips, args.limit,
-                                                args.data_folder)
+            res, ckpt, manifest, rows = evaluate_fold(p, args.model, onsets, device,
+                                                      args.clips, args.limit,
+                                                      args.data_folder)
         except (FileNotFoundError, NotImplementedError) as e:
             print(f"[skip] {p}: {e}")
             skipped.append({"patient": p, "reason": str(e)})
             continue
         agg = aggregate(res)
-        per_fold[p] = {**agg, "checkpoint": ckpt, "manifest": manifest}
+        probs = probability_report(rows)
+        per_fold[p] = {**agg, "checkpoint": ckpt, "manifest": manifest,
+                       "probabilities": probs}
         all_results.extend(res)
+        all_rows.extend(rows)
         print(f"[{p}] sens={agg['sensitivity']} "
               f"FA={agg['n_false_alarms']} over {agg['exposure_hours']:.3f} h "
               f"-> FDR/h={agg['fdr_per_hour']}  "
               f"L_EO={agg['mean_l_eo_s']}  L_CO={agg['mean_l_co_s']}")
+        if probs:
+            print(f"       predicted probability by true class "
+                  f"(DT={config.DECISION_THRESHOLD}):")
+            for k in ("interictal", "transition", "ictal"):
+                if k in probs:
+                    d = probs[k]
+                    print(f"         {k:<11} n={d['n']:>4}  mean={d['mean']:.3f}  "
+                          f"p10/50/90={d['p10']:.2f}/{d['p50']:.2f}/{d['p90']:.2f}  "
+                          f"above DT={d['frac_above_DT']:.0%}")
+            if "auc_ictal_vs_interictal" in probs:
+                a = probs["auc_ictal_vs_interictal"]
+                verdict = ("no discrimination -- more training, not a new threshold"
+                           if a < 0.6 else
+                           "discriminates; DT may simply be misplaced" if a > 0.75 else
+                           "weak discrimination")
+                print(f"         AUC(ictal vs interictal) = {a:.3f}   <- {verdict}")
 
     if not all_results:
         print("\nNo fold produced results. Nothing was evaluated -- this is a failure, "
@@ -236,6 +292,9 @@ def main():
     (out_dir / "pooled.json").write_text(json.dumps(pooled, indent=2, default=str))
     pd.DataFrame([r.__dict__ for r in all_results]).to_csv(
         out_dir / "per_source.csv", index=False)
+    # Raw per-clip probabilities, so any later diagnostic (threshold sweeps,
+    # calibration curves) can be run without re-doing inference.
+    pd.DataFrame(all_rows).to_csv(out_dir / "per_clip_scores.csv", index=False)
     write_manifest(out_dir / "run_manifest.json", seed=config.GLOBAL_SEED,
                    extra={"model": args.model, "folds": list(per_fold),
                           "skipped": skipped})
