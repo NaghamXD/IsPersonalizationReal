@@ -305,6 +305,25 @@ S1_LR = 1e-4                     # [PAPER] 1e-4
 S1_WEIGHT_DECAY = 0.05
 S1_BATCH_SIZE = 16
 S1_MAX_EPOCHS = 50               # [DECISION] compute ceiling
+
+# [DECISION] A single smooth cosine decay over the whole budget, NOT warm restarts.
+#
+#   The first pat01 run used CosineAnnealingWarmRestarts(T_0=10) with patience 5 and
+#   validation every epoch. The LR annealed to 3.4e-06 by epoch 9, the model froze,
+#   validation stopped improving after epoch 5, and patience expired at epoch 10 --
+#   the exact epoch the first warm restart fired. The schedule's entire purpose is the
+#   restarts, and early stopping guaranteed we never survived to see one. With T_0=10
+#   and patience 5 that is systematic, not luck: it would have happened on all eight
+#   folds.
+#
+#   The base repo hit the same wall and papered over it by loosening patience "because
+#   CosineAnnealingWarmRestarts causes periodic val-loss bumps at each restart". The
+#   cleaner fix is to drop the restarts: with one smooth decay, early stopping means
+#   "stopped improving" rather than "the learning rate reached zero". The methodology
+#   specifies early stopping for Step 1 and says nothing about restarts, so this is
+#   also closer to the spec.
+S1_SCHEDULER = "cosine"          # "cosine" | "cosine_warm_restarts"
+S1_COSINE_ETA_MIN = 1e-6
 S1_VAL_EVERY = 1                 # [DECISION] every epoch, so patience is meaningful
                                  #   within the 50-epoch cap
 S1_PATIENCE = 5

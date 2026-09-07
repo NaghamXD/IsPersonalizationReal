@@ -142,8 +142,18 @@ def train_fold(patient, args, device):
     model = VSViG_base(kpt_channels=config.KPT_CHANNELS).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.S1_LR,
                                   weight_decay=config.S1_WEIGHT_DECAY)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+    if config.S1_SCHEDULER == "cosine":
+        # One smooth decay across the whole budget, so the patience counter measures
+        # "stopped improving" rather than "the learning rate reached zero". See the
+        # note in config.py: with warm restarts at T_0=10 and patience 5, every fold
+        # would early-stop on precisely the epoch the first restart fired.
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config.S1_MAX_EPOCHS, eta_min=config.S1_COSINE_ETA_MIN)
+    elif config.S1_SCHEDULER == "cosine_warm_restarts":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=10, T_mult=2, eta_min=config.S1_COSINE_ETA_MIN)
+    else:
+        raise ValueError(f"unknown S1_SCHEDULER {config.S1_SCHEDULER!r}")
     criterion = nn.HuberLoss(delta=config.S1_HUBER_DELTA)
 
     start_epoch, best_val, trigger = 0, float("inf"), 0
@@ -244,7 +254,8 @@ def main():
     device = get_device()
     print(f"[env] device={device}  loss={config.S1_LOSS}(delta={config.S1_HUBER_DELTA})  "
           f"select_on={config.S1_SELECTION_METRIC}  batch={config.S1_BATCH_SIZE}  "
-          f"max_epochs={config.S1_MAX_EPOCHS}  patience={config.S1_PATIENCE}")
+          f"sched={config.S1_SCHEDULER}  max_epochs={config.S1_MAX_EPOCHS}  "
+          f"patience={config.S1_PATIENCE}")
     if device.type == "cpu":
         print("[warn] running on CPU -- a full 8-fold run will be impractically slow.")
 
