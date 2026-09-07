@@ -235,6 +235,37 @@ earlier LOPO training ran on CPU.
 
 ---
 
+## D15. Deterministic dynamic partition shuffle
+
+**Decided:** express the joint shuffle as a functional gather with a custom adjoint,
+replacing the original in-place advanced-index assignment.
+
+`Part_3DCNN.dynamic_trans` shuffled the 15 joints with
+`x[:, raw_order] = x[:, dynamic_order]`. That is a permutation, but its backward is
+`index_put_` with accumulation, and the MPS kernel for that
+(`index_put_with_accumulate_mps`) has no deterministic implementation. With
+`use_deterministic_algorithms(True, warn_only=True)` set in `src/utils/seeding.py`, it
+warned rather than raised — so training ran, but **seeded runs were not bit-identical**
+and the float drift compounded across epochs.
+
+That matters more here than it usually would: the headline result is a rate model over
+eight points, so per-fold run-to-run variance of the same order as the effect would be
+indistinguishable from the effect.
+
+Because the index set is a permutation — every joint used once, nothing accumulated —
+the adjoint is exactly the inverse permutation. Supplying it directly is mathematically
+exact rather than an approximation, and cheaper than the general scatter. Forward output
+is unchanged; `state_dict` is unchanged (the permutation is cached, deliberately not
+registered as a buffer, so checkpoints stay compatible); and an in-place write inside
+the autograd graph is removed as a side effect.
+
+Guarded: the code raises if the configured order is not a permutation, since the
+adjoint would then be wrong rather than merely non-deterministic.
+
+**Timing:** fixed after the first pat01 fold started and before any backbone was
+finished. Once eight backbones exist, changing anything inside the model means
+retraining all eight for consistency — this was the cheapest possible moment.
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been

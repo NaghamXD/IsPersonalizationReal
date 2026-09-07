@@ -183,6 +183,34 @@ class Grapher(nn.Module):
 
         return x.view(B,T,C,P,1)
 
+class _PermuteJoints(torch.autograd.Function):
+    """Permute the joint axis with an exact, deterministic adjoint.
+
+    The forward is a gather along the joint axis. Because the index set is a
+    PERMUTATION -- every joint used exactly once, nothing accumulated -- the adjoint is
+    simply the inverse permutation, applied here directly.
+
+    That sidesteps PyTorch's general scatter-add backward. The original code did the
+    shuffle as an in-place advanced-index assignment, whose backward is index_put_ with
+    accumulation; the MPS kernel for that (index_put_with_accumulate_mps) has no
+    deterministic implementation, so seeded runs diverged bit-for-bit and the drift
+    compounded over epochs. PyTorch cannot know the indices form a permutation, so it
+    reaches for the general kernel -- but we know, and a permutation's adjoint is exact.
+
+    The forward output is mathematically identical to the original. As a side effect
+    this also removes an in-place write on a tensor inside the autograd graph.
+    """
+
+    @staticmethod
+    def forward(ctx, x, perm, inv):
+        ctx.inv = inv
+        return x.index_select(-1, perm)
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        return grad_out.index_select(-1, ctx.inv), None, None
+
+
 class Part_3DCNN(nn.Module):
     
     def __init__(self, in_channels, out_channels, stride=1, dynamic=False, dynamic_point_order=None, SEED=None, expansion=4):
@@ -221,19 +249,42 @@ class Part_3DCNN(nn.Module):
         self.in_ = in_channels
         self.SEED = SEED
     
-    def dynamic_trans(self, x): # B,C,T,P,1, P: 15
-        # Implements Dynamic Partition Shuffle
-        B,C,T,P,_ = x.shape
-        x = x.view(-1,P)
-        if self.dynamic_point_order is not None:
-        # Ensure index wrapping if seed exceeds stored orders
-            seed_idx = self.SEED % len(self.dynamic_point_order)
-            dynamic_order = self.dynamic_point_order[seed_idx]
-            raw_order = list(np.arange(15))
-            x[:,raw_order] = x[:,dynamic_order]
-            
-        return x.view(B,C,T,P,1)
-    
+    def _perm_pair(self, order, n_joints, device):
+        """(perm, inv) as long tensors, cached per device.
+
+        Deliberately NOT registered as buffers: that would change state_dict and break
+        checkpoint compatibility. The permutation is fixed configuration, not state.
+        """
+        key = (str(device), n_joints)
+        cache = getattr(self, "_perm_cache", None)
+        if cache is None:
+            cache = self._perm_cache = {}
+        if key not in cache:
+            perm = torch.as_tensor(order, dtype=torch.long, device=device).reshape(-1)
+            if perm.numel() != n_joints:
+                raise ValueError(f"dynamic partition order has {perm.numel()} entries, "
+                                 f"expected {n_joints}")
+            if torch.unique(perm).numel() != n_joints:
+                raise ValueError("dynamic partition order is not a permutation -- the "
+                                 "deterministic adjoint is only valid for one")
+            cache[key] = (perm, torch.argsort(perm))
+        return cache[key]
+
+    def dynamic_trans(self, x):  # B,C,T,P,1
+        """Dynamic Partition Shuffle [PAPER 3.5].
+
+        Equivalent to the original `x[:, raw_order] = x[:, dynamic_order]` with
+        raw_order = 0..P-1, which is x_new = x_old[:, order] -- a gather. Expressed
+        functionally so the backward is deterministic; see _PermuteJoints.
+        """
+        B, C, T, P, _ = x.shape
+        if self.dynamic_point_order is None:
+            return x
+        seed_idx = self.SEED % len(self.dynamic_point_order)
+        perm, inv = self._perm_pair(self.dynamic_point_order[seed_idx], P, x.device)
+        y = _PermuteJoints.apply(x.reshape(-1, P), perm, inv)
+        return y.view(B, C, T, P, 1)
+
     def forward(self, x):
         B,T,C,P,_ = x.shape # B,T,C,P,1
         x = x.transpose(1,2).contiguous() # B,C,T,P,1
