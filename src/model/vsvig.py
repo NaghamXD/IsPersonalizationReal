@@ -1,9 +1,26 @@
+import os
+
+import numpy as np
 import torch
 import torch.nn as nn
-from torchvision import transforms
-from timm.models import register_model
-import numpy as np
-import os
+
+# torchvision was imported upstream for `transforms` and never used -- `transforms.`
+# appears nowhere in this file. Dropped rather than declared: it is a heavy
+# dependency to carry for a dead import.
+
+try:
+    from timm.models import register_model
+except ImportError:  # timm is optional
+    def register_model(fn):
+        """No-op stand-in.
+
+        Upstream, `@register_model` adds the factory to timm's global registry so it
+        can be built by name via `timm.create_model("VSViG_base")`. This project
+        always constructs the model directly, so the registry is never queried and
+        timm is not a required dependency. If timm IS installed the real decorator is
+        used, preserving upstream behaviour exactly.
+        """
+        return fn
 
 PATH_TO_DYNAMIC_PARTITIONS = 'dy_point_order.pt'
 

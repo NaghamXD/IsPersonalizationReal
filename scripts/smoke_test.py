@@ -39,6 +39,28 @@ def step(name, fn):
         FAILED.append(name)
 
 
+def check_all_modules_import():
+    """Import every module under src/ so a missing dependency surfaces here, as a
+    named module, rather than as a traceback from whichever script happened to run
+    first. scripts/ is excluded: preprocess.py executes its whole pipeline at import.
+    """
+    import importlib
+    failures = []
+    for path in sorted((ROOT / "src").glob("**/*.py")):
+        if path.name == "__init__.py":
+            continue
+        mod = ".".join(path.relative_to(ROOT).with_suffix("").parts)
+        try:
+            importlib.import_module(mod)
+        except ModuleNotFoundError as e:
+            failures.append(f"{mod}: {e}")
+        except Exception as e:
+            failures.append(f"{mod}: {type(e).__name__}: {e}")
+    if failures:
+        raise AssertionError("modules failed to import:\n    " + "\n    ".join(failures))
+    print(f"  all {len(list((ROOT/'src').glob('**/*.py')))} modules under src/ import cleanly")
+
+
 def check_config():
     import config
     assert len(config.COHORT) == 11, config.COHORT
@@ -107,6 +129,7 @@ def load_one_clip():
 
 if __name__ == "__main__":
     step("config self-consistency", check_config)
+    step("all src/ modules import", check_all_modules_import)
     step("torch-free unit tests", run_pytests)
     step("model shapes vs config", run_verify_shapes)
     step("dataset loads one real clip", load_one_clip)
