@@ -68,29 +68,55 @@ DYNAMIC_PARTITION_FILE = Path("dy_point_order.pt")
 # [PAPER] The corpus holds 14 patients and 33 annotated seizures.
 ALL_PATIENTS = [f"pat{i:02d}" for i in range(1, 15)]
 
-# [METHOD] Subjects with under one minute of pre-EEG baseline are excluded,
-#          leaving 11 patients and 24 seizures.
-# [DECISION] "Under one minute" is measured as the SUM of `EEG onset` offsets
-#          across a patient's annotated seizures -- i.e. total interictal video
-#          available before any seizure begins.
-# [DECISION] A patient below that threshold is RESCUED if separate seizure-free
-#          footage supplies enough interictal video to build Pool A.
+# [METHOD] Subjects with under one minute of pre-EEG baseline are excluded.
+# [DECISION] "Under one minute" is measured as the SUM of `EEG onset` offsets across
+#   a patient's annotated seizures -- total interictal video available before any
+#   seizure begins. A patient below that threshold is RESCUED if separate seizure-free
+#   footage supplies enough interictal video to build Pool A.
 #
-# Measured totals (seconds of pre-EEG footage), all 14:
+# Measured pre-EEG footage (seconds), all 14:
 #   pat01 4204  pat02 3316  pat03   17  pat04   14  pat05   21  pat06  364
 #   pat07  481  pat08 2020  pat09  388  pat10    8  pat11   61  pat12   27
 #   pat13   37  pat14   32
 #
-# NOTE -- an honest record of a real tension: seven patients fall below 60 s,
-# not three. pat03 and pat04 are rescued by free.mp4 / no-Sz2P.mp4 (11.0 min and
-# 45.6 min respectively -- verified from the video headers). pat13 (37 s) and
-# pat14 (32 s) fall below the threshold and have NO supplementary footage, yet
-# are retained by explicit instruction so the cohort lands on the 11/24 the
-# methodology specifies. They are kept, flagged, and their scarcity is handled
-# by EQUALISING Pool A across the whole cohort (see POOL_A_SIZE).
-EXCLUDED_PATIENTS = ["pat05", "pat10", "pat12"]
-COHORT = [p for p in ALL_PATIENTS if p not in EXCLUDED_PATIENTS]  # 11 patients
-assert len(COHORT) == 11, f"cohort must be 11 patients, got {len(COHORT)}"
+# EXCLUSIONS, IN TWO ROUNDS -- the second one revises the methodology draft.
+#
+# Round 1 (pat05, pat10, pat12): fail the <60 s rule outright with no supplementary
+#   footage. 21 s, 8 s and 27 s of pre-EEG video respectively.
+#
+# Round 2 (pat11, pat13, pat14): the methodology retains these to reach 11 patients /
+#   24 seizures, but measurement showed they cannot support the method, and that
+#   including them degrades every other patient. Three independent signals agreed:
+#
+#     a. Two of the three already fail the <60 s rule (pat13 37 s, pat14 32 s) and
+#        have no supplementary footage; pat11 clears it by one second.
+#     b. Non-overlapping interictal clips available: pat11 10, pat13 7, pat14 5.
+#        pat14 cannot fill a Pool A of 6 AT ALL, and the largest Pool A the full
+#        11-patient cohort could support is 5 -- against the methodology's N <= 20.
+#     c. Evaluable test-time interictal exposure: pat11 50 s, pat13 35 s, pat14 25 s.
+#        FDR/h is then quantised in steps of 72, 103 and 144 per hour, so a single
+#        false alarm swings the metric further than any plausible treatment effect.
+#
+#   The decisive argument is (b), and it is about the OTHER patients: keeping these
+#   three forces POOL_A_SIZE down to 5 for the whole cohort, estimating every
+#   patient's mu and sigma from a quarter of the samples the methodology specifies,
+#   in order to include three subjects whose FDR/h could not be measured anyway.
+#   Dropping them makes the smallest interictal pool pat03's 42, so POOL_A_SIZE = 20
+#   -- the methodology's own value -- becomes feasible for everyone, with at least
+#   22 clips left for Pool B.
+#
+#   Cost, stated plainly: 8 patients and 18 seizures instead of 11 and 24, and the
+#   section 3.5 hypothesis test runs at n = 8. This is a deliberate trade of cohort
+#   size for signature quality and it must be reported as such, not presented as the
+#   methodology's original cohort. See DECISIONS.md.
+EXCLUDED_PATIENTS = ["pat05", "pat10", "pat12",   # round 1: <60 s pre-EEG baseline
+                     "pat11", "pat13", "pat14"]   # round 2: cannot support Pool A
+COHORT = [p for p in ALL_PATIENTS if p not in EXCLUDED_PATIENTS]  # 8 patients
+assert len(COHORT) == 8, f"cohort must be 8 patients, got {len(COHORT)}"
+
+# Seizure counts of the retained cohort: pat01 2, pat02 2, pat03 2, pat04 1, pat06 3,
+# pat08 3, pat09 3, pat07 2  ->  18 seizures.
+N_SEIZURES_EXPECTED = 18
 
 # [PAPER] Table 6 semiology. P = partial (focal). PG = partial -> generalized
 #         tonic-clonic. Used for stratified validation-pair selection.
@@ -202,11 +228,12 @@ EXTRA_FOOTAGE_SAMPLING = "uniform"
 #   partly measure estimation noise instead of behavioural atypicality. Equalising N
 #   costs precision uniformly and buys comparability, which is what the hypothesis
 #   test actually requires. 6 is the largest N every retained patient can supply.
-POOL_A_SIZE = 6
+POOL_A_SIZE = 20   # [METHOD] N <= 20, now feasible for every retained patient
 POOL_A_SAMPLING = "stratified_uniform"   # [METHOD] NOT a sorted prefix; the base
                                          #   repo's interictal[:20] was a lexicographic
                                          #   artifact ("_1000" sorts before "_200").
-POOL_A_MIN_CONFIDENCE = 6                # below this, z is flagged low-confidence
+POOL_A_MIN_CONFIDENCE = 20               # every retained patient meets this; a
+                                         # patient below it would be flagged
 
 # [METHOD] "A strict temporal guardrail guarantees that no overlapping windows
 #          exist between Pool A and Pool B."
@@ -238,7 +265,8 @@ SIGMA_UNBIASED = False           # [METHOD] biased estimator, so N=1 gives 0 not
 
 # [METHOD] Signature stability gate, section 3.2.3.
 STABILITY_RATIO_THRESHOLD = 2.5
-STABILITY_N_BLOCKS = 3           # [DECISION] Pool A of 6 splits into 3 blocks of 2
+STABILITY_N_BLOCKS = 4           # [DECISION] Pool A of 20 splits into 4 blocks of 5,
+                                 # enough per block for a usable intra-patient variance
 
 # =============================================================================
 # HYPERNETWORK
@@ -302,7 +330,12 @@ S3_EXCLUDE_TRANSITION = True     # [METHOD] transition clips excluded from step 
 # =============================================================================
 # FOLD STRUCTURE
 # =============================================================================
-N_INTERNAL_VAL_PATIENTS = 2      # [METHOD] 1 test / 2 val / 8 train
+N_INTERNAL_VAL_PATIENTS = 2      # [METHOD] specifies 1 test / 2 val / 8 train.
+                                 # [DECISION] With an 8-patient cohort this becomes
+                                 # 1 test / 2 val / 5 train. Five conditioning points
+                                 # per fold makes z-jitter (HN_Z_JITTER_SIGMA) load-
+                                 # bearing rather than merely prudent: without it the
+                                 # trunk can memorise five points outright.
 INTERNAL_VAL_STRATIFY = "semiology"   # [METHOD] one P and one PG per fold
 FOLD_SEED = 42
 
@@ -351,17 +384,17 @@ HYPOTHESIS_REPORT_ALSO = ["pearson", "spearman", "bootstrap_ci"]
 #   D_p, which depends on the signature we are still building and is the axis the
 #   hypothesis is measured along. Fixed here BEFORE any z is computed.
 #
-#   Caveat worth stating: no PG patient in the retained cohort has more than 2
-#   seizures, so the "high seizure count FBTC" arm is the largest available PG.
-ABLATION_FOLDS = ["pat02", "pat04", "pat09"]
-#   pat02  PG, 2 seizures, 3316 s interictal -- largest PG by count and volume
-#   pat04  P,  1 seizure,  2736 s interictal -- lowest count, focal, data-rich
-#   pat09  P,  3 seizures,  388 s interictal -- mid-range volume, typical case
+#   Caveat: no PG patient in the retained cohort has more than 2 seizures, so the
+#   high-count arm is necessarily focal.
+ABLATION_FOLDS = ["pat09", "pat04", "pat02"]
+#   pat09  P,  3 seizures, 76 interictal clips  -- high seizure count
+#   pat04  P,  1 seizure,  82 interictal clips  -- low seizure count, focal
+#   pat02  PG, 2 seizures, 456 interictal clips -- median count, generalised
 #
-# [DECISION] pat13 and pat14 are the scarcity stress cases (37 s / 32 s). They are
-#   not in the ablation triple but every pipeline change gets a smoke check on them,
-#   because they are where a Pool A of 6 is most likely to break.
-SCARCITY_STRESS_FOLDS = ["pat13", "pat14"]
+# [DECISION] pat03 is the tightest remaining patient (42 interictal clips -> Pool A 20,
+#   Pool B 22). Not in the ablation triple, but every pipeline change gets a smoke
+#   check on it, because it is where Pool A/Pool B disjointness binds first.
+SCARCITY_STRESS_FOLDS = ["pat03"]
 
 # =============================================================================
 # SEEDS

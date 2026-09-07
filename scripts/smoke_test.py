@@ -45,6 +45,10 @@ def check_all_modules_import():
     first. scripts/ is excluded: preprocess.py executes its whole pipeline at import.
     """
     import importlib
+    try:
+        import torch  # noqa: F401
+    except ModuleNotFoundError as e:
+        raise Skip(f"{e} -- run this on the training machine") from None
     failures = []
     for path in sorted((ROOT / "src").glob("**/*.py")):
         if path.name == "__init__.py":
@@ -63,7 +67,7 @@ def check_all_modules_import():
 
 def check_config():
     import config
-    assert len(config.COHORT) == 11, config.COHORT
+    assert len(config.COHORT) == 8, config.COHORT
     assert config.PROJECTOR_IN_DIM == 2 * config.SIGNATURE_CHANNELS
     assert config.S3_BATCH_SIZE % 2 == 0, "step-3 batches must split 50/50"
     assert config.POOL_A_SIZE >= 1

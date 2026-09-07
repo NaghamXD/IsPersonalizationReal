@@ -1,0 +1,213 @@
+# Decision log
+
+Every choice that is not dictated by the VSViG paper or the methodology draft, with
+the reasoning and the evidence behind it. `config.py` carries the same decisions as
+inline tags; this file is the narrative.
+
+Provenance vocabulary, used consistently in both places:
+
+| tag | meaning |
+|---|---|
+| `[PAPER]` | stated in Xu et al., VSViG, ECCV 2024 |
+| `[METHOD]` | stated in `Methodology_draft_updated_3.sep.docx` |
+| `[INFERRED]` | not stated anywhere; derived because the source is silent or self-contradictory |
+| `[DECISION]` | our deliberate choice |
+
+---
+
+## D1. Starting point: commit `6fca412`, reimplemented
+
+**Decided:** start from the specified commit and rebuild, treating the later
+`feature/hypernetwork-lopo-adaptation` branch as reference only.
+
+`6fca412` predates all hypernetwork work — six later commits add 1,686 lines that
+implement most of the methodology. Starting here is a deliberate clean-slate choice,
+not an oversight. It also means inheriting two defects that the later branch had
+already fixed, both since corrected here: model selection on the held-out patient,
+and a keypoint channel mismatch that made the commit unable to run at all.
+
+## D2. Cohort: 8 patients, 18 seizures
+
+**Decided:** exclude `pat05, pat10, pat12` (round 1) and `pat11, pat13, pat14`
+(round 2). Retained: `pat01, pat02, pat03, pat04, pat06, pat07, pat08, pat09`.
+
+**Round 1** applies the methodology's own rule — under one minute of pre-EEG
+baseline, summed across a patient's seizures — with a rescue clause for patients whose
+supplementary seizure-free footage can still fill Pool A. That saves `pat03` (17 s of
+pre-EEG video but an 11-minute `free.mp4`) and `pat04` (14 s, plus 45.6 min across
+`free.mp4` and `no-Sz2P.mp4`).
+
+**Round 2 revises the methodology.** The draft retains `pat11/13/14` to reach 11
+patients and 24 seizures. Measurement showed they cannot support the method:
+
+| | pat11 | pat13 | pat14 |
+|---|---|---|---|
+| pre-EEG footage | 61 s | 37 s | 32 s |
+| interictal clips (non-overlapping) | 10 | 7 | **5** |
+| evaluable test exposure | 50 s | 35 s | 25 s |
+| one false alarm = | 72 /h | 103 /h | 144 /h |
+
+`pat14` cannot fill a Pool A of 6 at all, and the largest Pool A the full 11-patient
+cohort could support is **5** — against the methodology's own N ≤ 20.
+
+The decisive argument is not about these three patients; it is about the other eight.
+Keeping them forces `POOL_A_SIZE` down to 5 for the entire cohort, estimating every
+patient's μ and σ from a quarter of the specified samples, in order to include three
+subjects whose FDR/h could not be measured anyway. Dropping them makes the smallest
+interictal pool `pat03`'s 42, so **`POOL_A_SIZE = 20` becomes feasible for everyone**,
+with at least 22 clips left for Pool B.
+
+**Cost, stated plainly:** 8 patients / 18 seizures instead of 11 / 24, and the §3.5
+hypothesis test runs at n = 8. This is a trade of cohort size for signature quality
+and must be reported as such — never presented as the methodology's original cohort.
+
+**Unplanned benefit:** the retained cohort is 4 PG and 4 P, so a semiology-stratified
+validation pair is drawable in every fold.
+
+**Consequence for fold structure:** the methodology's 1 test / 2 val / 8 train becomes
+1 / 2 / **5**. Five conditioning points per fold makes z-jitter load-bearing rather
+than merely prudent — without it the trunk can memorise five points outright.
+
+## D3. Signature: μ and σ from stages 0–2
+
+**Decided:** extract at the stage-2 cut, `C′ = 192`, so the projector is 384 → 128
+(not 768 → 128).
+
+§3.2.2 says "Stages 0–2" but also states `X ∈ ℝ^{15×30×384}`, which exists nowhere in
+the network: stage 2 emits 192 channels and T is downsampled 30 → 15 → 8 → 4. Confirmed
+empirically by `scripts/verify_shapes.py`: after stages 0–2, `C′ = 192, T′ = 8, P = 15`.
+
+**Consequence to report:** σ is a standard deviation over **8 downsampled timesteps**
+per clip, not 30 raw frames. Coarser than the draft's text implies.
+
+## D4. σ definition and Pool A aggregation
+
+**Decided:** σ is the temporal standard deviation taken *before* spatial pooling, per
+the methodology — capturing joint velocity, not inter-clip posture drift. Across the
+Pool A clips, μ and σ are computed **per clip and then averaged**, not pooled into one
+time axis: concatenating clips drawn hours apart would inject spurious velocity spikes
+at the seams. Biased estimator, so a single clip yields σ = 0 rather than NaN.
+
+The base repo computed something different — std *across clips* of a fully
+spatiotemporally pooled embedding — which is a measure of posture change between
+clips, not of kinematic volatility.
+
+## D5. Skeleton normalisation: mid-hip centred, torso-scaled
+
+**Decided:** implement §3.1's mid-hip centering and torso-length scaling.
+
+The base repo divides x by 1920 and y by 1080 and does no centering, leaving the
+representation sensitive to where the patient lies in the bed and where the camera is
+mounted — exactly the nuisance variation that would otherwise enter z_behavior as if
+it were motor signature. Verified translation- and scale-invariant, and graceful on
+missing hips, degenerate torso and total pose failure.
+
+Keypoints carry **2 channels (x, y)**, matching the paper's `Stem(x_it, y_it)`. The
+3-channel variant retaining pose confidence is available as a one-line ablation
+(`config.KPT_CHANNELS`); confidence is informative about imputed joints but is a
+detector artifact rather than a spatial coordinate.
+
+## D6. FDR per hour
+
+**Decided:** a false alarm is a discrete **event**, not a thresholded window.
+Consecutive windows above threshold merge; a 60 s refractory period runs from each
+event's onset; a new event requires both that the accumulated probability has fallen
+back below threshold and that the refractory has expired.
+
+Denominator: interictal seconds **actually evaluated**, excluding the pre-ictal
+transition, the ictal window, and 15 minutes of post-ictal recovery. Footage the model
+was never run on is not time it was at risk of alarming, so exposure is counted from
+clips written, not from file duration.
+
+**Detection is measured separately**, from the raw accumulated-probability series
+rather than the grouped events — otherwise a false alarm 45 s before onset would
+suppress the alarm that actually detects the seizure, making sensitivity depend on
+unrelated interictal noise.
+
+Alarms *before* EEG onset count as false alarms, not early detections. This is the
+standard convention and is why L_EO is reported as a non-negative latency.
+
+## D7. Accumulation rule: mean
+
+**Decided:** `AP_t` is the **mean** of clip probabilities over τ = 3 s.
+
+The paper writes a sum. Summing ~6 sigmoid outputs against `DT = 0.3` is satisfied
+almost unconditionally and cannot reproduce the paper's reported latencies. Recorded as
+our reading, not as the paper's method. Configurable via `config.ACCUM_RULE`.
+
+## D8. Detection timestamp: clip end
+
+**Decided:** a clip's prediction is attributed to `t_start + 5 s`, the earliest instant
+a real-time system could have emitted it. The paper never says which edge it used, and
+the choice shifts every latency by up to 5 s.
+
+## D9. Hypothesis test: Poisson rate model
+
+**Decided:** §3.5 is fitted as a Poisson rate model with a **log-exposure offset**,
+not a Pearson correlation on raw FDR/h ratios. Exposure spans 0.10 h to 0.76 h across
+the retained cohort, so a bare ratio is dominated by recording length. Pearson,
+Spearman and a bootstrap CI are reported alongside as secondary.
+
+False-alarm **count** and **exposure hours** are reported beside every rate, per fold,
+never folded away into it.
+
+## D10. Test-time extraction does not overlap
+
+**Decided:** training extraction overlaps ictal and transition clips by 4 s as
+augmentation; test extraction is a continuous 5 s sliding window with a 5 s hop, in a
+separate directory.
+
+Scoring overlapping clips at test time inflates results twice: the accumulation window
+sees one movement repeatedly, and a seizure gets several independent chances to be
+detected. The base pipeline implemented only the training half.
+
+## D11. Supplementary footage sampled uniformly, capped at 40
+
+**Decided:** `free.mp4` / `no-Sz2P.mp4` windows are subsampled **uniformly across the
+whole file** to the methodology's cap of 40, not taken as a contiguous prefix. A prefix
+of a 30-minute recording is ~200 s from one moment of one activity — the transient
+behaviour the uniform sampling exists to avoid.
+
+## D12. Ablation micro-cohort, pre-registered
+
+**Decided:** ablations and hyperparameter sweeps run on three folds — `pat09` (high
+seizure count), `pat04` (low count, focal), `pat02` (median count, generalised) —
+chosen on seizure count and semiology **only**.
+
+Selecting them by D_p, as first proposed, is circular: D_p depends on the signature
+still being built, and tuning on a high-D_p fold optimises for exactly the patients
+§3.5 predicts should benefit most, leaking into the headline result. Fixed here before
+any z is computed. `pat03` gets a smoke check on every pipeline change as the tightest
+remaining Pool A / Pool B split.
+
+Epoch ceilings: 50 for the backbone, 100 for the hypernetwork, validation every epoch
+so the patience counter is meaningful inside the cap.
+
+## D13. Environment
+
+**Decided:** conda supplies the interpreter only; every library comes from PyPI via
+`requirements.txt`.
+
+Splitting the numeric stack across conda-forge and pip loads two OpenMP runtimes on
+macOS and aborts at `import torch`. `KMP_DUPLICATE_LIB_OK` is deliberately not used
+anywhere: its own documentation says it can "silently produce incorrect results", which
+is not a trade worth making in a pipeline whose outputs feed a clinical metric.
+
+`torchvision` was dropped (dead import) and `timm` made optional (used only for a
+registry decorator this project never queries).
+
+**Noted:** the previous `vsvig` conda env carries a CPU-only torch build, so all
+earlier LOPO training ran on CPU.
+
+---
+
+## Open
+
+- **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
+  dry-run only.
+- **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
+- **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
+  what exposure floor, once real FDR/h numbers exist.
+- **A_base initialisation** — the draft's `N(0, d_in⁻¹ × 10⁻²)` is ambiguous between a
+  variance and a standard deviation; the code implements the latter. A 100× difference
+  either way. Unresolved.
