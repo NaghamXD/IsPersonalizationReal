@@ -114,7 +114,8 @@ def train_fold(patient, args, device):
     seed = fold_seed(config.GLOBAL_SEED, idx)
     seed_everything(seed)
 
-    ckpt_dir = Path(config.BASELINE_CKPT_ROOT) / patient
+    ckpt_dir = Path(config.BASELINE_CKPT_ROOT) / (
+        f"{patient}_overfit" if args.overfit else patient)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     path_best = ckpt_dir / "best_model.pth"
     path_last = ckpt_dir / "last_checkpoint.pth"
@@ -131,13 +132,31 @@ def train_fold(patient, args, device):
           f"{'/'.join(f'{int(v*100)}%' for v in config.S1_SAMPLER_FRACTIONS.values())}")
     print(f"  val   {len(val_ds)} clips   seed={seed}")
 
+    if args.overfit:
+        # Deliberately no rebalancing, no shuffling, no held-out set: the only
+        # question is whether the model can memorise a handful of examples. If it
+        # cannot, nothing about the optimiser is worth tuning.
+        from torch.utils.data import Subset
+        keep = list(range(min(args.overfit, len(train_ds))))
+        train_ds = Subset(train_ds, keep)
+        val_ds = train_ds
+        train_loader = DataLoader(train_ds, batch_size=min(config.S1_BATCH_SIZE,
+                                                           len(keep)),
+                                  shuffle=True, num_workers=0, drop_last=False)
+        val_loader = DataLoader(val_ds, batch_size=min(config.S1_BATCH_SIZE, len(keep)),
+                                shuffle=False, num_workers=0)
+        print(f"  OVERFIT CHECK on {len(keep)} clips (train == val). "
+              f"Expect the loss to approach 0; if it plateaus, the pipeline cannot "
+              f"learn and hyperparameters are not the issue.")
+
     sampler = WeightedRandomSampler(weights, num_samples=len(train_ds), replacement=True)
     # drop_last: BatchNorm in training mode needs more than one sample, and a dataset
     # size leaving exactly one leftover would crash on the last batch of every epoch.
-    train_loader = DataLoader(train_ds, batch_size=config.S1_BATCH_SIZE,
-                              sampler=sampler, num_workers=0, drop_last=True)
-    val_loader = DataLoader(val_ds, batch_size=config.S1_BATCH_SIZE,
-                            shuffle=False, num_workers=0)
+    if not args.overfit:
+        train_loader = DataLoader(train_ds, batch_size=config.S1_BATCH_SIZE,
+                                  sampler=sampler, num_workers=0, drop_last=True)
+        val_loader = DataLoader(val_ds, batch_size=config.S1_BATCH_SIZE,
+                                shuffle=False, num_workers=0)
 
     model = VSViG_base(kpt_channels=config.KPT_CHANNELS).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.S1_LR,
@@ -223,6 +242,8 @@ def train_fold(patient, args, device):
                    path_last)
         path_log.write_text(json.dumps(history, indent=2))
 
+        if args.overfit:
+            continue
         if trigger >= config.S1_PATIENCE:
             print(f"  early stop at epoch {epoch+1} "
                   f"({config.S1_PATIENCE} epochs without improvement)")
@@ -247,6 +268,11 @@ def main():
                     help="cap batches per epoch (timing probe only, not a real run)")
     ap.add_argument("--restart", action="store_true",
                     help="ignore an existing checkpoint and start over")
+    ap.add_argument("--overfit", type=int, default=None, metavar="N",
+                    help="SANITY CHECK: train on N fixed clips and evaluate on those "
+                         "same N. A working pipeline drives this loss to ~0. If it "
+                         "cannot, the problem is data, gradients or architecture -- "
+                         "not the learning rate.")
     args = ap.parse_args()
     if not args.fold and not args.all_folds:
         ap.error("pass --fold patNN or --all-folds")
