@@ -160,11 +160,11 @@ def evaluate(model, loader, device, sources=None):
     sc, ys = torch.cat(all_s).numpy(), torch.cat(all_y).numpy()
     auc = auc_from_labels(sc, ys)
     if sources is None:
-        return mse, auc, float("nan")
+        return mse, auc, float("nan"), sc
     if len(sources) != len(sc):
         raise ValueError(f"{len(sources)} source ids for {len(sc)} validation clips -- "
                          "the val loader must not shuffle and must not drop_last")
-    return mse, auc, within_source_auc(sc, ys, sources)["pair_weighted"]
+    return mse, auc, within_source_auc(sc, ys, sources)["pair_weighted"], sc
 
 
 def train_fold(patient, args, device):
@@ -179,12 +179,15 @@ def train_fold(patient, args, device):
     path_best = ckpt_dir / "best_model.pth"
     path_last = ckpt_dir / "last_checkpoint.pth"
     path_log = ckpt_dir / "training_log.json"
+    path_val_scores = ckpt_dir / "val_scores_by_epoch.npz"
 
     train_ds = VSViGDataset(config.PROCESSED_DIR, train_file)
     val_ds = VSViGDataset(config.PROCESSED_DIR, val_file)
     # Recording id per validation clip, in file order. The val loader uses
     # shuffle=False and no drop_last, so loader order == file order.
-    val_sources = [source_id(n) for n, _ in json.loads(Path(val_file).read_text())]
+    val_clip_list = json.loads(Path(val_file).read_text())
+    val_sources = [source_id(n) for n, _ in val_clip_list]
+    val_score_rows = []
     weights, counts = sample_weights(train_ds)
 
     print(f"\n=== fold {patient} "
@@ -245,6 +248,22 @@ def train_fold(patient, args, device):
     start_epoch, best_val, trigger = 0, float("-inf"), 0
     history = {"train_loss": [], "val_mse": [], "val_auc": [], "val_auc_within": [],
                "lr": [], "epoch_s": []}
+    if args.restart:
+        # --restart overwrites best_model.pth, last_checkpoint.pth and
+        # training_log.json in place. A per-epoch curve is not reproducible without
+        # paying for the whole run again, so archive it instead of destroying it.
+        # (Written after a --restart smoke test silently erased fold 1's 63-epoch log.)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        archive = ckpt_dir / "archive" / stamp
+        moved = []
+        for f in (path_log, path_best, path_last, path_val_scores):
+            if f.exists():
+                archive.mkdir(parents=True, exist_ok=True)
+                f.replace(archive / f.name)
+                moved.append(f.name)
+        if moved:
+            print(f"  --restart: archived {', '.join(moved)} -> {archive}")
+
     if path_last.exists() and not args.restart:
         ck = torch.load(path_last, map_location=device)
         # A checkpoint selected under a different metric carries a `best_val` on an
@@ -296,7 +315,8 @@ def train_fold(patient, args, device):
         scheduler.step()
 
         train_loss = running / max(nb, 1)
-        val_mse, val_auc, val_auc_ws = evaluate(model, val_loader, device, val_sources)
+        val_mse, val_auc, val_auc_ws, val_scores = evaluate(
+            model, val_loader, device, val_sources)
         # D19: the stratified AUC selects; the pooled one is logged for comparison only.
         select = val_auc_ws if val_auc_ws == val_auc_ws else val_auc
         val_bn = evaluate_batch_stats(model, val_loader, device) if args.overfit else None
@@ -341,6 +361,16 @@ def train_fold(patient, args, device):
                     "selection_metric": config.S1_SELECTION_METRIC},
                    path_last)
         path_log.write_text(json.dumps(history, indent=2))
+        # Skipped under --overfit, where val is a Subset of train and the clip list
+        # below would not line up with the scores.
+        if val_sources is not None:
+            val_score_rows.append(np.asarray(val_scores, dtype=np.float32))
+            np.savez_compressed(path_val_scores,
+                                scores=np.stack(val_score_rows),
+                                clips=np.array([n for n, _ in val_clip_list]),
+                                labels=np.array([l for _, l in val_clip_list],
+                                                dtype=np.float32),
+                                sources=np.array(val_sources))
 
         if args.overfit:
             continue

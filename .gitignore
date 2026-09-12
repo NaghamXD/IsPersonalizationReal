@@ -24,6 +24,12 @@ docs/
 # Generated outputs (checkpoints, logs, reports)
 outputs/**/*.pth
 outputs/**/*.json
+# ...except the small per-run records. A training curve costs hours to regenerate
+# and is a few KB to keep; it should never again exist only on one disk.
+!outputs/**/training_log.json
+!outputs/**/run_manifest.json
+!outputs/**/per_fold.json
+!outputs/**/pooled.json
 outputs/**/*.csv
 outputs/**/*.png
 

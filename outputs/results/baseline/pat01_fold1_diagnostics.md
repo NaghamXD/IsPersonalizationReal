@@ -48,3 +48,38 @@ refinement.
 ## Not a checkpoint-selection artifact
 best_model (epoch 33) and last_checkpoint (epoch 63) agree on pat01:
 pooled AUC 0.625 vs 0.631. The gap is patient-level, not epoch-level.
+
+
+---
+
+## Appendix — fold-1 training curve, transcribed
+
+The per-epoch `training_log.json` for this run was destroyed on 2026-09-12 by a
+`--restart` smoke test before it had been committed (`outputs/**/*.json` was
+gitignored at the time). The figures below are transcribed from the analysis run
+against it while it existed; the raw curve is not recoverable without repeating the
+1.98 h run. Both causes are now fixed: `--restart` archives rather than overwrites,
+and run logs are tracked.
+
+63 epochs, 1.98 h, mean 113 s/epoch. Early stop on patience 30; best at epoch 33.
+
+| epochs | mean AUC (pooled) | max | min | sd |
+|---|---|---|---|---|
+| 1-10 | 0.570 | 0.782 | 0.373 | 0.135 |
+| 11-20 | 0.732 | 0.836 | 0.562 | 0.090 |
+| 21-30 | 0.774 | 0.863 | 0.633 | 0.065 |
+| 31-40 | 0.828 | 0.911 | 0.687 | 0.056 |
+| 41-50 | 0.841 | 0.876 | 0.797 | 0.027 |
+| 51-63 | 0.846 | 0.892 | 0.783 | 0.035 |
+
+- best AUC 0.9111 @ epoch 33; its MSE 0.29027
+- best MSE 0.18534 @ epoch 10; its AUC 0.7817
+- constant-predictor MSE on this validation set: 0.23066 — the best-AUC checkpoint
+  scores 1.26x that, i.e. worse than predicting the mean, while ranking well
+- corr(AUC, MSE) across all epochs: -0.166
+- post-plateau (epochs 21-63) pooled AUC: 0.824 +/- 0.055; epoch-to-epoch |dAUC|
+  after epoch 20: 0.051 mean, 0.192 max
+- train huber 0.11218 (ep1) -> 0.00119 (min, ep57) while validation AUC stayed ~0.82
+
+Every AUC in this appendix is the POOLED figure, which D19 retired. The within-source
+equivalents were never computed for this run and now cannot be.
