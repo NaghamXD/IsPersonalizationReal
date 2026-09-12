@@ -294,7 +294,7 @@ Whatever is chosen, DT must be **identical for the baseline and the adapted mode
 within a fold, or the section 3.5 comparison measures threshold placement rather than
 personalisation.
 
-## D17. The backbone was trained for ~3% of the reference budget — OPEN
+## D17. The backbone was trained for ~3% of the reference budget
 
 **Established by diagnosis, fix not yet chosen.**
 
@@ -323,17 +323,60 @@ not acceptable. So the budget question is really a throughput question first:
 ~5.5 MB clips before any compute begins. `scripts/benchmark_throughput.py` separates
 compute from I/O and reports the achievable epoch time.
 
-**Decide once that measurement exists:** the epoch budget, the patience policy (patience
-5 fired at epoch 6 on a signal that had not stabilised), and whether to raise the
-learning rate with warmup rather than only buying more steps.
+**RESOLVED.** Throughput was measured, not assumed, and there is no speedup to be had:
+
+| lever | result |
+|---|---|
+| DataLoader workers | within noise — the job is compute-bound (519 ms/batch compute vs 28–74 ms of overlappable I/O) |
+| fp16 autocast | 1.01× |
+| batch 32 / 64 | **worse** per clip: 32.5 → 35.5 → 38.0 ms. Batch 16 is already optimal |
+
+So ~82 s/epoch is the hardware floor, and 8 folds cost 9.2 h / 18.4 h / 36.9 h at
+50 / 100 / 200 epochs.
+
+**Settled:**
+- `S1_MAX_EPOCHS = 300` as a **cap, not a target**.
+- `S1_PATIENCE = 30`, not counted before epoch 15 (`S1_PATIENCE_WARMUP_EPOCHS`).
+  Patience 5 fired at epoch 6 on a signal that had not stabilised — convergence here is
+  slow, and BatchNorm running statistics need many updates before an eval-mode metric
+  means anything (the overfit probe measured a +0.81 MSE gap between batch and running
+  statistics at epoch 1).
+- Fold 1 (`pat01`) runs against the cap with per-epoch validation AUC logged. It is a
+  real fold, so nothing is wasted; the budget for folds 2–8 is then set from where that
+  curve actually plateaus. Worst case for fold 1 is 6.8 h.
+- Learning rate left at 1e-4. One change at a time: the schedule, the selection metric
+  and the budget have all just moved, and an LR change now would be unattributable.
+
+**What the curve decides.** If AUC climbs and flattens, the plateau sets the budget. If
+it peaks and declines while training loss keeps falling, more epochs will not help — a
+five-patient training cohort cannot support generalisation at this capacity, which is a
+finding about the problem rather than a training failure. Either way it must be read
+before spending on the remaining seven folds.
+
+## D18. Checkpoint selection on validation AUC
+
+**Decided:** select checkpoints and early-stop on validation AUC over the two internal
+validation patients; keep MSE in the log.
+
+The checkpoint chosen by best validation MSE scored **AUC 0.513** — chance. MSE is
+dominated by the label distribution, while detection consumes a *ranking*: the
+accumulation rule asks whether ictal clips score above interictal ones. Selecting on
+MSE was choosing models that cannot discriminate at all.
+
+The two metrics are not close to interchangeable. On synthetic data, a constant 0.44
+predictor and a weakly discriminative one score MSE 0.2416 vs 0.2232 — 8% apart — while
+their AUCs are 0.500 and 0.691.
+
+AUC is computed on the internal validation patients only, so it stays leak-free, and it
+is a direct proxy for the cross-patient transfer the project is actually about. MSE
+remains logged so results stay comparable to the paper's reported RMSE. Soft transition
+labels are dropped from the AUC rather than bucketed into a class.
 
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
   dry-run only.
 - **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
-- **Training budget, throughput and patience policy (D17)** — blocking for
-  Stage 6; nothing downstream is interpretable from a 3%-budget backbone.
 - **Decision threshold selection (D16)** — inherit 0.3, or select per fold on
   the internal validation patients under a stated operating criterion.
 - **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is

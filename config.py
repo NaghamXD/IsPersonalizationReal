@@ -314,8 +314,20 @@ S1_BATCH_SIZE = 16
 #   num_workers=0 every batch stalls the main thread on 16 synchronous file reads
 #   before any compute starts. Measure with scripts/benchmark_throughput.py and set
 #   this to whatever that reports as best on the training machine.
-S1_NUM_WORKERS = 0
-S1_MAX_EPOCHS = 50               # [DECISION] compute ceiling
+S1_NUM_WORKERS = 2
+# [DECISION] 300, after measuring. The overfit probe showed this model needs far more
+#   gradient steps than it was given: the first real run did 960 in total, against
+#   roughly 32,000 implied by the paper's 200 epochs, and stopped with AUC 0.513.
+#
+#   Throughput is fixed at ~82 s/epoch -- measured, not assumed. fp16 autocast gives
+#   1.01x; batch 32 and 64 are WORSE per clip (32.5 -> 35.5 -> 38.0 ms), so batch 16 is
+#   already optimal; DataLoader workers are within noise because the job is
+#   compute-bound (519 ms/batch compute vs 28-74 ms of overlappable I/O).
+#
+#   300 is a CAP, not a target. Fold 1 runs against it with per-epoch validation AUC
+#   logged; the budget for folds 2-8 is then set from where that curve actually
+#   plateaus. Fold 1 is a real fold, so none of it is wasted.
+S1_MAX_EPOCHS = 300
 
 # [DECISION] A single smooth cosine decay over the whole budget, NOT warm restarts.
 #
@@ -337,7 +349,13 @@ S1_SCHEDULER = "cosine"          # "cosine" | "cosine_warm_restarts"
 S1_COSINE_ETA_MIN = 1e-6
 S1_VAL_EVERY = 1                 # [DECISION] every epoch, so patience is meaningful
                                  #   within the 50-epoch cap
-S1_PATIENCE = 5
+# [DECISION] 30, with a warm-up before the counter starts.
+#   Patience 5 fired at epoch 6 on a signal that had not stabilised. Two separate
+#   causes: convergence here is genuinely slow, and BatchNorm running statistics need
+#   many updates before eval-mode numbers mean anything at all (the overfit probe
+#   measured a +0.81 MSE gap between batch and running statistics at epoch 1).
+S1_PATIENCE = 30
+S1_PATIENCE_WARMUP_EPOCHS = 15   # no early stopping before this epoch
 S1_GRAD_CLIP = 1.0
 S1_SAMPLER_FRACTIONS = {"interictal": 0.45, "ictal": 0.45, "transition": 0.10}
 

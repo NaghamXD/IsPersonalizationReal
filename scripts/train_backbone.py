@@ -284,6 +284,11 @@ def train_fold(patient, args, device):
         if improved:
             best_val, trigger = val_auc, 0
             torch.save(model.state_dict(), path_best)
+        elif epoch + 1 <= config.S1_PATIENCE_WARMUP_EPOCHS:
+            # Warm-up: track the best checkpoint, but do not let these epochs burn
+            # patience. BatchNorm running statistics are still converging here, so an
+            # eval-mode metric that has not improved says nothing yet.
+            trigger = 0
         else:
             trigger += 1
         if args.overfit:
@@ -309,7 +314,8 @@ def train_fold(patient, args, device):
             continue
         if trigger >= config.S1_PATIENCE:
             print(f"  early stop at epoch {epoch+1} "
-                  f"({config.S1_PATIENCE} epochs without improvement)")
+                  f"({config.S1_PATIENCE} epochs without an AUC improvement; "
+                  f"patience began after epoch {config.S1_PATIENCE_WARMUP_EPOCHS})")
             break
 
     if args.overfit:
@@ -376,7 +382,8 @@ def main():
     print(f"[env] device={device}  loss={config.S1_LOSS}(delta={config.S1_HUBER_DELTA})  "
           f"select_on=auc  batch={config.S1_BATCH_SIZE}  workers={config.S1_NUM_WORKERS}  "
           f"sched={config.S1_SCHEDULER}  max_epochs={config.S1_MAX_EPOCHS}  "
-          f"patience={config.S1_PATIENCE}")
+          f"patience={config.S1_PATIENCE} (from epoch "
+          f"{config.S1_PATIENCE_WARMUP_EPOCHS})")
     if device.type == "cpu":
         print("[warn] running on CPU -- a full 8-fold run will be impractically slow.")
 
