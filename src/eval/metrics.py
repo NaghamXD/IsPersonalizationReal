@@ -231,6 +231,7 @@ def within_source_auc(scores, labels, sources):
     s, y, g = s[keep], y[keep], g[keep]
 
     per, num, den, macro = {}, 0.0, 0.0, []
+    by_patient = {}
     for src in dict.fromkeys(g.tolist()):   # insertion order, deterministic, str keys
         m = g == src
         pos, neg = int((y[m] == 1.0).sum()), int((y[m] == 0.0).sum())
@@ -241,8 +242,19 @@ def within_source_auc(scores, labels, sources):
             num += w * a
             den += w
             macro.append(a)
+            by_patient.setdefault(str(src).split("_")[0], []).append((a, w))
+
+    # [D19a] Pair-count weighting across PATIENTS is wrong, and fold 1 showed why:
+    # pat04 contributes one seizure recording and pat07 two, so the pair weights made
+    # the combined validation metric numerically identical to pat07 alone
+    # (corr = +1.000, while corr with pat04 was +0.425). A metric for a study about
+    # patient heterogeneity cannot be one patient. Pairs still weight recordings
+    # WITHIN a patient; patients themselves are then averaged equally.
+    pb = [sum(a * w for a, w in v) / sum(w for _, w in v) for v in by_patient.values()]
 
     return {
+        "patient_balanced": float(np.mean(pb)) if pb else float("nan"),
+        "n_patients_used": len(pb),
         "pair_weighted": (num / den) if den > 0 else float("nan"),
         "macro": float(np.mean(macro)) if macro else float("nan"),
         "pooled": auc_from_labels(s, y),

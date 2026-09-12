@@ -297,3 +297,31 @@ def test_within_source_auc_rejects_length_mismatch():
         assert "length mismatch" in str(e)
     else:
         raise AssertionError("silently accepted mismatched source ids")
+
+
+def test_within_source_auc_balances_patients_not_pairs():
+    """D19a. One patient contributing many recordings must not become the metric.
+
+    On fold 1, pat04 brought one seizure recording and pat07 two, so pair-count
+    weighting made the combined validation score numerically identical to pat07 alone
+    (corr +1.000 with pat07, +0.425 with pat04). A metric for a study ABOUT patient
+    heterogeneity cannot silently be a single patient.
+    """
+    from src.eval.metrics import within_source_auc
+    scores = [0.9, 0.1] + [0.1, 0.9, 0.2, 0.8, 0.3, 0.7]
+    labels = [1.0, 0.0] + [1.0, 0.0, 1.0, 0.0, 1.0, 0.0]
+    src    = ["patA_Sz1"] * 2 + ["patB_Sz1"] * 6      # patA perfect, patB inverted
+
+    r = within_source_auc(scores, labels, src)
+    assert r["n_patients_used"] == 2
+    assert abs(r["patient_balanced"] - 0.5) < 1e-9    # 1.0 and 0.0, averaged equally
+    assert r["pair_weighted"] < 0.2                   # drowned out by patB's 9 pairs
+
+
+def test_within_source_auc_patient_balanced_equals_pair_weighted_for_one_patient():
+    from src.eval.metrics import within_source_auc
+    scores = [0.1, 0.9, 0.2, 0.8]
+    labels = [0.0, 1.0, 0.0, 1.0]
+    r = within_source_auc(scores, labels, ["patA_Sz1", "patA_Sz1", "patA_Sz2", "patA_Sz2"])
+    assert abs(r["patient_balanced"] - r["pair_weighted"]) < 1e-12
+    assert r["n_patients_used"] == 1

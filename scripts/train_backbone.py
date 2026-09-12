@@ -164,7 +164,7 @@ def evaluate(model, loader, device, sources=None):
     if len(sources) != len(sc):
         raise ValueError(f"{len(sources)} source ids for {len(sc)} validation clips -- "
                          "the val loader must not shuffle and must not drop_last")
-    return mse, auc, within_source_auc(sc, ys, sources)["pair_weighted"], sc
+    return mse, auc, within_source_auc(sc, ys, sources)["patient_balanced"], sc
 
 
 def train_fold(patient, args, device):
@@ -406,16 +406,32 @@ def train_fold(patient, args, device):
                    extra={"stage": "6_backbone", "fold": patient,
                           "val_patients": fold["val_patients"],
                           "train_patients": fold["train_patients"],
-                          "best_val_auc": best_val,
+                          "selection_metric": config.S1_SELECTION_METRIC,
+                          "best_val_selected": best_val,
                           "best_val_mse": min(history["val_mse"]) if history["val_mse"] else None,
                           "epochs_run": len(history["val_mse"])})
-    if history["val_auc"]:
-        i = int(max(range(len(history["val_auc"])),
-                    key=lambda k: (history["val_auc"][k] == history["val_auc"][k],
-                                   history["val_auc"][k])))
-        print(f"  best val AUC {history['val_auc'][i]:.4f} at epoch {i+1} "
-              f"(its MSE {history['val_mse'][i]:.5f}, "
-              f"RMSE {100*history['val_mse'][i]**0.5:.2f}%) -> {path_best}")
+
+    # Report the epoch that was ACTUALLY SAVED, i.e. the argmax of the metric that
+    # selects. Reading this off history["val_auc"] -- the pooled figure kept only for
+    # comparison -- named epoch 33 on fold 1 while best_model.pth held epoch 29.
+    key = "val_auc_within" if config.S1_SELECTION_METRIC == "auc_within_source" else "val_auc"
+    sel = history.get(key) or history["val_auc"]
+    if sel:
+        i = int(max(range(len(sel)), key=lambda k: (sel[k] == sel[k], sel[k])))
+        other = history["val_auc"][i] if key == "val_auc_within" else history["val_auc_within"][i]
+        print(f"  saved epoch {i+1}: {key}={sel[i]:.4f} (pooled {other:.4f}, "
+              f"MSE {history['val_mse'][i]:.5f}, RMSE {100*history['val_mse'][i]**0.5:.2f}%)"
+              f" -> {path_best}")
+        # The max of a noisy per-epoch metric is an optimistic estimate of the model's
+        # level. Quote the plateau beside it so the selected value is never mistaken
+        # for an unbiased one; only the held-out patient gives that.
+        import statistics as _st
+        tail = [v for v in sel[config.S1_PATIENCE_WARMUP_EPOCHS:] if v == v]
+        if len(tail) > 2:
+            mu, sd = _st.mean(tail), _st.pstdev(tail)
+            print(f"  post-warm-up plateau: {mu:.4f} +/- {sd:.4f} over {len(tail)} epochs "
+                  f"-- the selected {sel[i]:.4f} sits {(sel[i]-mu)/sd:.2f} sd above it "
+                  f"and is a max over {len(tail)} noisy draws, not an unbiased estimate.")
 
 
 def main():

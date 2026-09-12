@@ -205,7 +205,8 @@ def probability_report(rows):
         a = within_source_auc([r["prob"] for r in rows],
                               [r["label"] for r in rows],
                               [r["source"] for r in rows])
-        out["auc_within_source"] = a["pair_weighted"]
+        out["auc_within_source"] = a["patient_balanced"]
+        out["auc_within_source_pairweighted"] = a["pair_weighted"]
         out["auc_within_source_macro"] = a["macro"]
         out["auc_pooled"] = a["pooled"]
         out["auc_per_source"] = a["per_source"]

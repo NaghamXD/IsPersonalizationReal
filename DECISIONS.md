@@ -431,6 +431,75 @@ Ranking survives where margin does not, and a fixed DECISION_THRESHOLD of 0.3 ca
 sensibly on such a distribution. That is D16, now blocking rather than optional.
 
 
+## D19a. Patients are weighted equally; pairs weight recordings only within a patient
+
+**Date:** 2026-09-12, same day as D19, after the fold-1 retrain.
+
+D19 weighted every within-recording pair equally. Decomposing the fold-1 validation
+curve by patient showed what that does in this cohort: pat04 contributes one seizure
+recording and pat07 two, so the combined metric was numerically **identical to pat07
+alone** — corr(combined, pat07) = +1.000, corr(combined, pat04) = +0.425. A selection
+metric for a study about patient heterogeneity had quietly become a single-patient
+metric.
+
+Pairs still weight recordings within a patient. Patients are then averaged equally.
+`within_source_auc` returns `patient_balanced` (selects and reports), with
+`pair_weighted`, `macro` and `pooled` retained for comparison.
+
+## D20. Checkpoint selection on internal validation does not transfer — OPEN
+
+**Date:** 2026-09-12, after the fold-1 retrain under D19.
+
+Fold 1 was retrained selecting on within-source AUC. It reached validation 0.9606 at
+epoch 29 and early-stopped at 59. Three checkpoints from that single run were then
+scored on the held-out patient:
+
+| checkpoint | validation (within-source) | held-out pat01 (within-source) |
+|---|---|---|
+| epoch 29 — best by within-source | 0.9606 | **0.498** |
+| epoch 33 — best by pooled | 0.9359 | 0.525 |
+| epoch 59 — final | 0.8528 | 0.542 |
+
+All three sit at chance on pat01, and they are ordered *inversely* to their validation
+scores. Fixing the metric changed which epoch was chosen and did not change the
+outcome, because **the choice does not matter**: nothing in this validation set
+predicts held-out performance.
+
+The mechanism is visible in the per-epoch validation scores (`val_scores_by_epoch.npz`,
+the artifact added after D19 precisely so this kind of question would not cost another
+training run). Decomposed by validation patient, the two curves are **uncorrelated
+after warm-up: corr(pat04, pat07) = -0.185** over epochs 16-59. The validation signal
+does not generalise from one validation patient to the other, so there is no reason to
+expect it to generalise to a third. Per-epoch noise is correspondingly large: mean
+epoch-to-epoch |ΔAUC| is 0.084 combined and 0.186 for pat04, whose estimate rests on a
+single recording's worth of pairs.
+
+This is not a metric bug. It is the internal validation set being too small to select
+on: LOPO over 8 patients leaves 2 validation patients, and after D19a's balancing,
+2 noisy estimates.
+
+**Not yet decided.** The options, none free:
+
+1. **Remove selection from the protocol.** Pre-register a fixed epoch budget, no early
+   stopping, take the final weights (or an average of the last k). Selection noise
+   becomes zero by construction, and baseline and adapted are then trained under an
+   identical rule, which is what a paired comparison needs. Costs the possibility that
+   a fixed budget is wrong for some folds.
+2. **Enlarge internal validation** to 3 patients, leaving 4 to train on. Almost
+   certainly the wrong trade at this cohort size.
+3. **Smooth the selection curve** (k-epoch mean). Reduces variance, does not create
+   signal that is not there — the cross-patient correlation says there is none.
+
+Whichever is chosen, it must be **identical for the baseline and the adapted model**.
+The §3.5 claim is a paired difference; if the two arms select checkpoints under
+different amounts of noise, the difference measures the selection rule.
+
+**What this does not say.** It does not say the backbone is untrainable — it reaches
+1.000 within-recording AUC on patients it has seen, and 0.76-0.89 on pat04 and pat07.
+It says that for pat01 the cohort model transfers no usable ranking, and that we cannot
+currently pick a checkpoint that would change this.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
@@ -443,6 +512,9 @@ sensibly on such a distribution. That is D16, now blocking rather than optional.
   criterion, held identical between baseline and adapted.
 - **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is
   applied per patient or pooled. Blocking for Stage 5's gate.
+- **Checkpoint selection (D20)** — blocking for Stage 7. Baseline and adapted must be
+  trained under one identical, pre-registered rule, and the current per-epoch rule
+  demonstrably selects noise.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
   what exposure floor, once real FDR/h numbers exist.
 - **A_base initialisation** — the draft's `N(0, d_in⁻¹ × 10⁻²)` is ambiguous between a
