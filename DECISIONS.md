@@ -372,13 +372,75 @@ is a direct proxy for the cross-patient transfer the project is actually about. 
 remains logged so results stay comparable to the paper's reported RMSE. Soft transition
 labels are dropped from the AUC rather than bucketed into a class.
 
+## D19. AUC is computed within recording, never pooled across recordings
+
+**Date:** 2026-09-12 — after the first honest held-out evaluation (fold 1, pat01).
+
+Fold 1 finished at validation AUC 0.9111 and was evaluated on pat01's 527
+non-overlapping sliding-window test clips. Pooled across the patient's recordings the
+AUC read 0.625. Broken down by recording it read **0.511 and 0.547** — chance, twice.
+
+The pooled figure is an artifact, and the mechanism is Simpson's paradox. Recordings
+sit at different baseline score levels, and the ictal/interictal mix differs between
+them. A model that merely scores recording B above recording A therefore earns AUC
+above 0.5 without ordering a single clip correctly inside either one. Measured on
+every scope available at the time:
+
+| scope | pooled | within recording |
+|---|---|---|
+| pat01 — held out | 0.625 | 0.511, 0.547 |
+| pat04 — internal validation | 0.836 | 0.762 |
+| pat07 — internal validation | 0.942 | 0.860, 0.890 |
+| pat03 — in the training set | — | 1.000, 1.000 |
+
+The inflation is +0.07 to +0.10 everywhere it can be checked, and it is not uniform
+across patients — which is precisely what makes it dangerous here. **The central claim
+of this project is a comparison**: adapted model minus baseline, correlated against
+behavioural atypicality. A metric whose bias varies by patient would let
+between-recording score offsets enter that correlation as if they were personalisation
+benefit. The §3.5 result could come out significant for reasons having nothing to do
+with the hypernetwork.
+
+**Decision.** The selection and reporting metric is the Mann-Whitney statistic
+restricted to within-recording pairs:
+
+    AUC_ws  =  Σ_s (n_pos_s · n_neg_s · AUC_s)  /  Σ_s (n_pos_s · n_neg_s)
+
+Weighting by pair count, rather than averaging per-recording AUCs equally, is what
+keeps this a single Mann-Whitney estimate. It also removes the need for a minimum
+clips-per-recording rule: a recording holding only one class contributes zero pairs and
+drops out on its own. Free-footage files, which have no ictal clips by construction, are
+handled by that rule rather than by a special case.
+
+The unweighted mean over usable recordings (`macro`) and the old pooled figure are both
+logged beside it. Pooled is retained **only** so the size of the artifact stays visible
+in the record; it is never the headline and never selects.
+
+Implemented in `src/eval/metrics.within_source_auc`, wired into
+`scripts/train_backbone.py` (selection) and `scripts/evaluate.py` (reporting).
+`config.S1_SELECTION_METRIC = "auc_within_source"`.
+
+**Consequence, stated plainly.** Fold 1 was selected under the pooled metric and must
+be retrained; its checkpoint is not comparable to anything produced from here on. The
+trainer now refuses to resume a checkpoint whose `selection_metric` differs from the
+configured one, rather than silently comparing two incomparable high-water marks.
+
+**What this does not decide.** It does not fix the calibration collapse observed in the
+same run (pat07_Sz1: AUC 0.860 at a mean ictal-minus-interictal separation of +0.002).
+Ranking survives where margin does not, and a fixed DECISION_THRESHOLD of 0.3 cannot sit
+sensibly on such a distribution. That is D16, now blocking rather than optional.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
   dry-run only.
 - **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
-- **Decision threshold selection (D16)** — inherit 0.3, or select per fold on
-  the internal validation patients under a stated operating criterion.
+- **Decision threshold selection (D16) — now BLOCKING.** Fold 1 showed ranking without
+  margin (AUC 0.860 at +0.002 separation; 62% of all clips above 0.9). No fixed DT can
+  sit sensibly on that distribution, so every FDR/h number is meaningless until DT is
+  selected per fold on the internal validation patients, under a stated operating
+  criterion, held identical between baseline and adapted.
 - **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is
   applied per patient or pooled. Blocking for Stage 5's gate.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against

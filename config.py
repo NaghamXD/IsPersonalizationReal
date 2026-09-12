@@ -305,7 +305,14 @@ S1_HUBER_DELTA = 1.0
 #   the accumulation rule asks whether ictal clips score above interictal ones. The
 #   two came apart badly -- the checkpoint chosen by best validation MSE scored
 #   AUC 0.513, chance. Selecting on MSE was picking models that cannot discriminate.
-S1_SELECTION_METRIC = "auc"      # "auc" | "mse"
+# [DECISION D19] The AUC that selects is computed WITHIN recording, not pooled across
+#   recordings. Pooling lets a model earn credit for scoring one recording above
+#   another, which is not seizure detection. On fold 1 this inflated every figure that
+#   could be checked by +0.07 to +0.10, and turned a held-out patient that is at chance
+#   inside both of its own recordings (0.511, 0.547) into an apparent 0.625. See
+#   src/eval/metrics.within_source_auc.
+S1_SELECTION_METRIC = "auc_within_source"   # "auc_within_source" | "auc" | "mse"
+AUC_GROUPING = "source"                     # recording id, from src.utils.naming.source_id
 S1_OPTIMIZER = "adamw"
 S1_LR = 1e-4                     # [PAPER] 1e-4
 S1_WEIGHT_DECAY = 0.05

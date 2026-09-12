@@ -39,9 +39,9 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 import config
 from src.data.dataset import VSViGDataset
 from src.model.vsvig import VSViG_base
-from src.eval.metrics import auc_from_labels
+from src.eval.metrics import auc_from_labels, within_source_auc
 from src.utils.manifest import write_manifest
-from src.utils.naming import patient_of
+from src.utils.naming import patient_of, source_id
 from src.utils.seeding import fold_seed, seed_everything
 
 
@@ -124,10 +124,16 @@ def evaluate_batch_stats(model, loader, device):
 
 
 @torch.no_grad()
-def evaluate(model, loader, device):
-    """MSE and AUC on the validation patients. Returns (mse, auc).
+def evaluate(model, loader, device, sources=None):
+    """MSE and AUC on the validation patients. Returns (mse, auc_pooled, auc_within).
 
-    [DECISION] Selection is on AUC, with MSE reported alongside.
+    [DECISION D18] Selection is on AUC, with MSE reported alongside.
+    [DECISION D19] The AUC that selects is the WITHIN-SOURCE (stratified) one.
+
+    `sources` is the recording id of each validation clip, in loader order (the val
+    loader never shuffles). When it is None -- the --overfit path, where val IS train
+    and the question is only whether the loss falls -- the stratified AUC is nan and
+    selection falls back to the pooled figure.
 
     MSE is dominated by the label distribution; AUC measures whether ictal clips are
     RANKED above interictal ones, which is what the accumulation-and-threshold decision
@@ -151,8 +157,14 @@ def evaluate(model, loader, device):
         all_y.append(labels.float().cpu())
     model.train()
     mse = total / max(n, 1)
-    auc = auc_from_labels(torch.cat(all_s).numpy(), torch.cat(all_y).numpy())
-    return mse, auc
+    sc, ys = torch.cat(all_s).numpy(), torch.cat(all_y).numpy()
+    auc = auc_from_labels(sc, ys)
+    if sources is None:
+        return mse, auc, float("nan")
+    if len(sources) != len(sc):
+        raise ValueError(f"{len(sources)} source ids for {len(sc)} validation clips -- "
+                         "the val loader must not shuffle and must not drop_last")
+    return mse, auc, within_source_auc(sc, ys, sources)["pair_weighted"]
 
 
 def train_fold(patient, args, device):
@@ -170,6 +182,9 @@ def train_fold(patient, args, device):
 
     train_ds = VSViGDataset(config.PROCESSED_DIR, train_file)
     val_ds = VSViGDataset(config.PROCESSED_DIR, val_file)
+    # Recording id per validation clip, in file order. The val loader uses
+    # shuffle=False and no drop_last, so loader order == file order.
+    val_sources = [source_id(n) for n, _ in json.loads(Path(val_file).read_text())]
     weights, counts = sample_weights(train_ds)
 
     print(f"\n=== fold {patient} "
@@ -192,6 +207,7 @@ def train_fold(patient, args, device):
                                   shuffle=True, num_workers=0, drop_last=False)
         val_loader = DataLoader(val_ds, batch_size=min(config.S1_BATCH_SIZE, len(keep)),
                                 shuffle=False, num_workers=0)
+        val_sources = None
         print(f"  OVERFIT CHECK on {len(keep)} clips (train == val). "
               f"Expect the loss to approach 0; if it plateaus, the pipeline cannot "
               f"learn and hyperparameters are not the issue.")
@@ -227,9 +243,20 @@ def train_fold(patient, args, device):
 
     # Selection is on AUC, where HIGHER is better -- hence -inf, not +inf.
     start_epoch, best_val, trigger = 0, float("-inf"), 0
-    history = {"train_loss": [], "val_mse": [], "val_auc": [], "lr": [], "epoch_s": []}
+    history = {"train_loss": [], "val_mse": [], "val_auc": [], "val_auc_within": [],
+               "lr": [], "epoch_s": []}
     if path_last.exists() and not args.restart:
         ck = torch.load(path_last, map_location=device)
+        # A checkpoint selected under a different metric carries a `best_val` on an
+        # incomparable scale: resuming would compare stratified AUCs against a pooled
+        # high-water mark and never save a best model again. Refuse, loudly.
+        prev = ck.get("selection_metric", "auc")
+        if prev != config.S1_SELECTION_METRIC:
+            raise SystemExit(
+                f"\n  {path_last} was trained with selection_metric={prev!r}, but "
+                f"config says {config.S1_SELECTION_METRIC!r}.\n"
+                f"  Resuming would compare the two on incomparable scales.\n"
+                f"  Re-run with --restart to train this fold from scratch.")
         model.load_state_dict(ck["model_state_dict"])
         optimizer.load_state_dict(ck["optimizer_state_dict"])
         scheduler.load_state_dict(ck["scheduler_state_dict"])
@@ -269,20 +296,23 @@ def train_fold(patient, args, device):
         scheduler.step()
 
         train_loss = running / max(nb, 1)
-        val_mse, val_auc = evaluate(model, val_loader, device)
+        val_mse, val_auc, val_auc_ws = evaluate(model, val_loader, device, val_sources)
+        # D19: the stratified AUC selects; the pooled one is logged for comparison only.
+        select = val_auc_ws if val_auc_ws == val_auc_ws else val_auc
         val_bn = evaluate_batch_stats(model, val_loader, device) if args.overfit else None
         dt = time.time() - t0
         history["train_loss"].append(train_loss)
         history["val_mse"].append(val_mse)
         history["val_auc"].append(val_auc)
+        history["val_auc_within"].append(val_auc_ws)
         history["lr"].append(optimizer.param_groups[0]["lr"])
         history["epoch_s"].append(round(dt, 1))
 
         # AUC: higher is better. nan (a validation split with only one class)
         # never counts as an improvement.
-        improved = (val_auc == val_auc) and val_auc > best_val
+        improved = (select == select) and select > best_val
         if improved:
-            best_val, trigger = val_auc, 0
+            best_val, trigger = select, 0
             torch.save(model.state_dict(), path_best)
         elif epoch + 1 <= config.S1_PATIENCE_WARMUP_EPOCHS:
             # Warm-up: track the best checkpoint, but do not let these epochs burn
@@ -298,7 +328,8 @@ def train_fold(patient, args, device):
                       f"  gap={val_mse - val_bn:+.5f}")
         else:
             print(f"  epoch {epoch+1:>4}/{max_epochs}  "
-                  f"huber={train_loss:.5f}  val_auc={val_auc:.4f}  "
+                  f"huber={train_loss:.5f}  val_auc_ws={val_auc_ws:.4f} "
+                  f"(pooled {val_auc:.4f})  "
                   f"val_mse={val_mse:.5f} (rmse={100*val_mse**0.5:.2f}%)  "
                   f"lr={history['lr'][-1]:.2e}  {dt:.0f}s  "
                   f"{'** best' if improved else f'no improve {trigger}/{config.S1_PATIENCE}'}")
@@ -306,7 +337,8 @@ def train_fold(patient, args, device):
         torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "scheduler_state_dict": scheduler.state_dict(),
-                    "best_val": best_val, "trigger": trigger, "history": history},
+                    "best_val": best_val, "trigger": trigger, "history": history,
+                    "selection_metric": config.S1_SELECTION_METRIC},
                    path_last)
         path_log.write_text(json.dumps(history, indent=2))
 
@@ -380,7 +412,7 @@ def main():
 
     device = get_device()
     print(f"[env] device={device}  loss={config.S1_LOSS}(delta={config.S1_HUBER_DELTA})  "
-          f"select_on=auc  batch={config.S1_BATCH_SIZE}  workers={config.S1_NUM_WORKERS}  "
+          f"select_on={config.S1_SELECTION_METRIC}  batch={config.S1_BATCH_SIZE}  workers={config.S1_NUM_WORKERS}  "
           f"sched={config.S1_SCHEDULER}  max_epochs={config.S1_MAX_EPOCHS}  "
           f"patience={config.S1_PATIENCE} (from epoch "
           f"{config.S1_PATIENCE_WARMUP_EPOCHS})")

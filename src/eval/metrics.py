@@ -174,3 +174,80 @@ def auc_from_labels(scores, labels):
     if keep.sum() == 0:
         return float("nan")
     return roc_auc(s[keep], y[keep] == 1.0)
+
+
+def within_source_auc(scores, labels, sources):
+    """Stratified AUC: only (ictal, interictal) pairs from the SAME recording count.
+
+    [DECISION D19] This, not the pooled AUC, is the selection and reporting metric.
+
+    Pooling clips across recordings manufactures ranking signal that has nothing to do
+    with seizure detection. Recordings sit at different baseline score levels, and the
+    ictal/interictal mix differs per recording, so a model that merely scores recording
+    B above recording A earns AUC above 0.5 even when it orders nothing correctly
+    inside either one. Measured on fold 1 (held-out pat01) this was worth +0.07 to
+    +0.10 everywhere it could be checked:
+
+        pat01 (held out)     pooled 0.625   within-source 0.511, 0.547
+        pat04 (internal val) pooled 0.836   within-source 0.762
+        pat07 (internal val) pooled 0.942   within-source 0.860, 0.890
+
+    The held-out patient is at chance inside each of its own recordings; the pooled
+    number says 0.625. A baseline-versus-adapted comparison run on the pooled metric
+    would credit personalisation with between-recording offsets.
+
+    The estimator is the Mann-Whitney statistic restricted to within-source pairs,
+    i.e. the pair-count-weighted mean of the per-source AUCs:
+
+        sum_s (n_pos_s * n_neg_s * AUC_s) / sum_s (n_pos_s * n_neg_s)
+
+    Weighting by pair count rather than averaging the per-source AUCs equally is what
+    makes it a single Mann-Whitney estimate, and it needs no minimum-clips-per-source
+    rule: a recording holding only one class contributes zero pairs and drops out on
+    its own, instead of being discarded by an arbitrary threshold. The unweighted mean
+    ("macro") is returned alongside, because the two separating is itself informative
+    -- it means the usable recordings disagree and the pair-weighted figure is being
+    carried by whichever recording happens to be longest.
+
+    Returns a dict:
+        pair_weighted   float   PRIMARY -- selection and reporting
+        macro           float   unweighted mean over usable sources
+        pooled          float   the old metric, kept only for comparison
+        per_source      {source: {"auc", "n_pos", "n_neg"}}
+        n_sources_used  int     sources contributing at least one pair
+        n_sources_seen  int
+        n_pairs         int
+    """
+    import numpy as np
+
+    s = np.asarray(scores, dtype=float)
+    y = np.asarray(labels, dtype=float)
+    g = np.asarray([str(x) for x in sources])
+    if not (len(s) == len(y) == len(g)):
+        raise ValueError(f"length mismatch: {len(s)} scores, {len(y)} labels, "
+                         f"{len(g)} sources")
+
+    keep = (y == 0.0) | (y == 1.0)          # soft transition labels have no class
+    s, y, g = s[keep], y[keep], g[keep]
+
+    per, num, den, macro = {}, 0.0, 0.0, []
+    for src in dict.fromkeys(g.tolist()):   # insertion order, deterministic, str keys
+        m = g == src
+        pos, neg = int((y[m] == 1.0).sum()), int((y[m] == 0.0).sum())
+        a = roc_auc(s[m], y[m] == 1.0)
+        per[src] = {"auc": a, "n_pos": pos, "n_neg": neg}
+        if pos and neg:
+            w = float(pos * neg)
+            num += w * a
+            den += w
+            macro.append(a)
+
+    return {
+        "pair_weighted": (num / den) if den > 0 else float("nan"),
+        "macro": float(np.mean(macro)) if macro else float("nan"),
+        "pooled": auc_from_labels(s, y),
+        "per_source": per,
+        "n_sources_used": len(macro),
+        "n_sources_seen": len(per),
+        "n_pairs": int(den),
+    }

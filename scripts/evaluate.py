@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 
 import config
 from src.data.dataset import VSViGDataset
-from src.eval.metrics import aggregate, evaluate_source
+from src.eval.metrics import aggregate, evaluate_source, within_source_auc
 from src.model.vsvig import VSViG_base
 from src.utils.manifest import write_manifest
 from src.utils.seeding import seed_everything
@@ -195,12 +195,21 @@ def probability_report(rows):
                      "frac_above_DT": float((p > config.DECISION_THRESHOLD).mean())}
     if "interictal" in out and "ictal" in out:
         # Rank separation: the probability that a random ictal clip scores above a
-        # random interictal one. 0.5 is chance. This is threshold-free, so it says
-        # whether the model discriminates at all, independent of where DT sits.
-        pi = np.array([r["prob"] for r in rows if r["label"] == 0.0])
-        pc = np.array([r["prob"] for r in rows if r["label"] == 1.0])
-        wins = (pc[:, None] > pi[None, :]).mean() + 0.5 * (pc[:, None] == pi[None, :]).mean()
-        out["auc_ictal_vs_interictal"] = float(wins)
+        # random interictal one. 0.5 is chance. Threshold-free, so it says whether the
+        # model discriminates at all, independent of where DT sits.
+        #
+        # [D19] Reported WITHIN recording. The pooled figure is kept beside it, but it
+        # is not the headline: pooling rewards scoring one recording above another,
+        # which is not detection. On fold 1 the pooled number read 0.625 for a model
+        # sitting at 0.511 / 0.547 inside pat01's own two recordings.
+        a = within_source_auc([r["prob"] for r in rows],
+                              [r["label"] for r in rows],
+                              [r["source"] for r in rows])
+        out["auc_within_source"] = a["pair_weighted"]
+        out["auc_within_source_macro"] = a["macro"]
+        out["auc_pooled"] = a["pooled"]
+        out["auc_per_source"] = a["per_source"]
+        out["n_sources_used"] = a["n_sources_used"]
     return out
 
 
@@ -268,13 +277,20 @@ def main():
                     print(f"         {k:<11} n={d['n']:>4}  mean={d['mean']:.3f}  "
                           f"p10/50/90={d['p10']:.2f}/{d['p50']:.2f}/{d['p90']:.2f}  "
                           f"above DT={d['frac_above_DT']:.0%}")
-            if "auc_ictal_vs_interictal" in probs:
-                a = probs["auc_ictal_vs_interictal"]
+            if "auc_within_source" in probs:
+                a = probs["auc_within_source"]
                 verdict = ("no discrimination -- more training, not a new threshold"
                            if a < 0.6 else
                            "discriminates; DT may simply be misplaced" if a > 0.75 else
                            "weak discrimination")
-                print(f"         AUC(ictal vs interictal) = {a:.3f}   <- {verdict}")
+                print(f"         AUC within-source = {a:.3f}   <- {verdict}")
+                print(f"         AUC pooled        = {probs['auc_pooled']:.3f}   "
+                      f"(inflated by {probs['auc_pooled'] - a:+.3f}; not the headline)")
+                for src, d in probs["auc_per_source"].items():
+                    mark = "" if d["n_pos"] and d["n_neg"] else "   (one class only -- no pairs)"
+                    auc_s = f"{d['auc']:.3f}" if d["auc"] == d["auc"] else "  n/a"
+                    print(f"           {src:<20} AUC={auc_s}  "
+                          f"ictal={d['n_pos']:<4} interictal={d['n_neg']:<4}{mark}")
 
     if not all_results:
         print("\nNo fold produced results. Nothing was evaluated -- this is a failure, "

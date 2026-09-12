@@ -227,3 +227,73 @@ if __name__ == "__main__":
                test_exposure_disparity_is_visible, test_roc_auc]:
         fn()
     print("\nALL EVAL TESTS PASSED")
+
+
+# --------------------------------------------------------------- D19: stratified AUC
+def test_within_source_auc_detects_simpsons_paradox():
+    """Pooling across recordings can invent ranking signal that does not exist.
+
+    Two recordings; inside each one the model orders clips WORSE than chance. But
+    recording B sits entirely above recording A and holds most of the ictal clips, so
+    the pooled AUC looks like a working detector. This is the fold-1 failure in
+    miniature, and it is why D19 exists.
+    """
+    from src.eval.metrics import within_source_auc
+    scores = [0.1, 0.2, 0.3, 0.4, 0.7, 0.8, 0.9, 1.0]
+    labels = [0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+    src    = ["A"] * 4 + ["B"] * 4
+
+    r = within_source_auc(scores, labels, src)
+    assert r["pooled"] > 0.65, "test case is not exhibiting the paradox"
+    assert abs(r["pair_weighted"] - 1 / 3) < 1e-9
+    assert abs(r["macro"] - 1 / 3) < 1e-9
+    assert r["pooled"] - r["pair_weighted"] > 0.3
+    assert r["n_sources_used"] == 2
+    assert r["n_pairs"] == 1 * 3 + 3 * 1
+
+
+def test_within_source_auc_drops_single_class_recordings():
+    """A recording holding only one class contributes no pairs and must not be
+    counted -- free-footage files have zero ictal clips by construction."""
+    from src.eval.metrics import within_source_auc
+    scores = [0.9, 0.1, 0.2, 0.3]
+    labels = [1.0, 0.0, 0.0, 0.0]
+    src    = ["Sz1", "Sz1", "free", "free"]
+
+    r = within_source_auc(scores, labels, src)
+    assert r["n_sources_seen"] == 2
+    assert r["n_sources_used"] == 1              # 'free' has no ictal clip
+    assert r["n_pairs"] == 1
+    assert r["pair_weighted"] == 1.0
+    assert r["per_source"]["free"]["n_pos"] == 0
+    assert r["per_source"]["free"]["auc"] != r["per_source"]["free"]["auc"]   # nan
+
+
+def test_within_source_auc_matches_pooled_for_a_single_recording():
+    """With one recording there is nothing to stratify, so the two must agree."""
+    from src.eval.metrics import within_source_auc
+    scores = [0.1, 0.4, 0.35, 0.8, 0.6]
+    labels = [0.0, 1.0, 0.0, 1.0, 0.0]
+    r = within_source_auc(scores, labels, ["Sz1"] * 5)
+    assert abs(r["pair_weighted"] - r["pooled"]) < 1e-12
+    assert abs(r["macro"] - r["pooled"]) < 1e-12
+
+
+def test_within_source_auc_ignores_soft_transition_labels():
+    """Transition clips carry a ramp label in (0,1) and belong to neither class."""
+    from src.eval.metrics import within_source_auc
+    scores = [0.1, 0.9, 0.5]
+    labels = [0.0, 1.0, 0.4]
+    r = within_source_auc(scores, labels, ["Sz1"] * 3)
+    assert r["n_pairs"] == 1
+    assert r["pair_weighted"] == 1.0
+
+
+def test_within_source_auc_rejects_length_mismatch():
+    from src.eval.metrics import within_source_auc
+    try:
+        within_source_auc([0.1, 0.2], [0.0, 1.0], ["A"])
+    except ValueError as e:
+        assert "length mismatch" in str(e)
+    else:
+        raise AssertionError("silently accepted mismatched source ids")
