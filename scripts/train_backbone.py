@@ -39,6 +39,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 import config
 from src.data.dataset import VSViGDataset
 from src.model.vsvig import VSViG_base
+from src.eval.metrics import auc_from_labels
 from src.utils.manifest import write_manifest
 from src.utils.naming import patient_of
 from src.utils.seeding import fold_seed, seed_everything
@@ -124,13 +125,21 @@ def evaluate_batch_stats(model, loader, device):
 
 @torch.no_grad()
 def evaluate(model, loader, device):
-    """Pooled MSE on the validation patients.
+    """MSE and AUC on the validation patients. Returns (mse, auc).
 
-    [DECISION] MSE for selection even though training uses Huber, so the number stays
-    comparable to the paper's reported RMSE. Recorded in config as S1_SELECTION_METRIC.
+    [DECISION] Selection is on AUC, with MSE reported alongside.
+
+    MSE is dominated by the label distribution; AUC measures whether ictal clips are
+    RANKED above interictal ones, which is what the accumulation-and-threshold decision
+    rule actually consumes. The two came apart badly in practice: the checkpoint chosen
+    by best validation MSE scored AUC 0.513 -- chance. Selecting on MSE was picking
+    models that could not discriminate.
+
+    MSE stays in the log so the number remains comparable to the paper's RMSE.
     """
     model.eval()
     total, n = 0.0, 0
+    all_s, all_y = [], []
     for sample, labels in loader:
         out = model(sample["data"].to(device), sample["kpts"].to(device))
         if out.dim() > 1:
@@ -138,8 +147,12 @@ def evaluate(model, loader, device):
         labels = labels.float().to(device)
         total += torch.nn.functional.mse_loss(out, labels, reduction="sum").item()
         n += labels.numel()
+        all_s.append(out.float().cpu())
+        all_y.append(labels.float().cpu())
     model.train()
-    return total / max(n, 1)
+    mse = total / max(n, 1)
+    auc = auc_from_labels(torch.cat(all_s).numpy(), torch.cat(all_y).numpy())
+    return mse, auc
 
 
 def train_fold(patient, args, device):
@@ -212,8 +225,9 @@ def train_fold(patient, args, device):
         raise ValueError(f"unknown S1_SCHEDULER {config.S1_SCHEDULER!r}")
     criterion = nn.HuberLoss(delta=config.S1_HUBER_DELTA)
 
-    start_epoch, best_val, trigger = 0, float("inf"), 0
-    history = {"train_loss": [], "val_mse": [], "lr": [], "epoch_s": []}
+    # Selection is on AUC, where HIGHER is better -- hence -inf, not +inf.
+    start_epoch, best_val, trigger = 0, float("-inf"), 0
+    history = {"train_loss": [], "val_mse": [], "val_auc": [], "lr": [], "epoch_s": []}
     if path_last.exists() and not args.restart:
         ck = torch.load(path_last, map_location=device)
         model.load_state_dict(ck["model_state_dict"])
@@ -222,7 +236,7 @@ def train_fold(patient, args, device):
         start_epoch = ck["epoch"] + 1
         best_val, trigger = ck["best_val"], ck.get("trigger", 0)
         history = ck.get("history", history)
-        print(f"  resuming at epoch {start_epoch} (best val MSE {best_val:.5f})")
+        print(f"  resuming at epoch {start_epoch} (best val AUC {best_val:.4f})")
 
     if args.verify_only:
         sample, labels = next(iter(train_loader))
@@ -255,17 +269,20 @@ def train_fold(patient, args, device):
         scheduler.step()
 
         train_loss = running / max(nb, 1)
-        val_mse = evaluate(model, val_loader, device)
+        val_mse, val_auc = evaluate(model, val_loader, device)
         val_bn = evaluate_batch_stats(model, val_loader, device) if args.overfit else None
         dt = time.time() - t0
         history["train_loss"].append(train_loss)
         history["val_mse"].append(val_mse)
+        history["val_auc"].append(val_auc)
         history["lr"].append(optimizer.param_groups[0]["lr"])
         history["epoch_s"].append(round(dt, 1))
 
-        improved = val_mse < best_val
+        # AUC: higher is better. nan (a validation split with only one class)
+        # never counts as an improvement.
+        improved = (val_auc == val_auc) and val_auc > best_val
         if improved:
-            best_val, trigger = val_mse, 0
+            best_val, trigger = val_auc, 0
             torch.save(model.state_dict(), path_best)
         else:
             trigger += 1
@@ -276,9 +293,10 @@ def train_fold(patient, args, device):
                       f"  gap={val_mse - val_bn:+.5f}")
         else:
             print(f"  epoch {epoch+1:>4}/{max_epochs}  "
-                  f"huber={train_loss:.5f}  val_mse={val_mse:.5f} "
-                  f"(rmse={100*val_mse**0.5:.2f}%)  lr={history['lr'][-1]:.2e}  "
-                  f"{dt:.0f}s  {'** best' if improved else f'no improve {trigger}/{config.S1_PATIENCE}'}")
+                  f"huber={train_loss:.5f}  val_auc={val_auc:.4f}  "
+                  f"val_mse={val_mse:.5f} (rmse={100*val_mse**0.5:.2f}%)  "
+                  f"lr={history['lr'][-1]:.2e}  {dt:.0f}s  "
+                  f"{'** best' if improved else f'no improve {trigger}/{config.S1_PATIENCE}'}")
 
         torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
@@ -320,9 +338,16 @@ def train_fold(patient, args, device):
                    extra={"stage": "6_backbone", "fold": patient,
                           "val_patients": fold["val_patients"],
                           "train_patients": fold["train_patients"],
-                          "best_val_mse": best_val,
+                          "best_val_auc": best_val,
+                          "best_val_mse": min(history["val_mse"]) if history["val_mse"] else None,
                           "epochs_run": len(history["val_mse"])})
-    print(f"  best val MSE {best_val:.5f} (RMSE {100*best_val**0.5:.2f}%) -> {path_best}")
+    if history["val_auc"]:
+        i = int(max(range(len(history["val_auc"])),
+                    key=lambda k: (history["val_auc"][k] == history["val_auc"][k],
+                                   history["val_auc"][k])))
+        print(f"  best val AUC {history['val_auc'][i]:.4f} at epoch {i+1} "
+              f"(its MSE {history['val_mse'][i]:.5f}, "
+              f"RMSE {100*history['val_mse'][i]**0.5:.2f}%) -> {path_best}")
 
 
 def main():
@@ -349,7 +374,7 @@ def main():
 
     device = get_device()
     print(f"[env] device={device}  loss={config.S1_LOSS}(delta={config.S1_HUBER_DELTA})  "
-          f"select_on={config.S1_SELECTION_METRIC}  batch={config.S1_BATCH_SIZE}  "
+          f"select_on=auc  batch={config.S1_BATCH_SIZE}  workers={config.S1_NUM_WORKERS}  "
           f"sched={config.S1_SCHEDULER}  max_epochs={config.S1_MAX_EPOCHS}  "
           f"patience={config.S1_PATIENCE}")
     if device.type == "cpu":

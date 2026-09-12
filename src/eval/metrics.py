@@ -123,3 +123,54 @@ def aggregate(results):
         "mean_l_co_s": float(np.mean(lco)) if lco else None,
         "median_l_co_s": float(np.median(lco)) if lco else None,
     }
+
+def _average_ranks(a):
+    """Tie-corrected average ranks, 1-based. NumPy only -- no scipy dependency for a
+    function this small, so the metric is importable anywhere the tests run."""
+    import numpy as np
+    a = np.asarray(a, dtype=float)
+    order = np.argsort(a, kind="mergesort")
+    sorted_a, ranks, n, i = a[order], np.empty(len(a), dtype=float), len(a), 0
+    while i < n:
+        j = i
+        while j + 1 < n and sorted_a[j + 1] == sorted_a[i]:
+            j += 1
+        ranks[order[i:j + 1]] = (i + j) / 2.0 + 1.0
+        i = j + 1
+    return ranks
+
+
+def roc_auc(scores, positive):
+    """Rank-based AUC (Mann-Whitney U), tie-corrected.
+
+    The probability that a randomly chosen positive scores above a randomly chosen
+    negative. 0.5 is chance. Threshold-free, so it says whether the model ORDERS clips
+    correctly independently of where DT sits -- which is what a detector actually needs
+    and what MSE does not measure.
+
+    This distinction is not academic here: the checkpoint selected by best validation
+    MSE scored AUC 0.513, i.e. MSE chose a model that cannot discriminate at all.
+
+    `positive` is a boolean/0-1 mask. Clips that are neither (soft transition labels)
+    must be excluded by the caller -- they have no unambiguous class.
+    """
+    import numpy as np
+
+    s = np.asarray(scores, dtype=float)
+    y = np.asarray(positive).astype(int)
+    n_pos, n_neg = int((y == 1).sum()), int((y == 0).sum())
+    if n_pos == 0 or n_neg == 0:
+        return float("nan")
+    r = _average_ranks(s)                 # ties share the mean rank -> count 0.5 each
+    return float((r[y == 1].sum() - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg))
+
+
+def auc_from_labels(scores, labels):
+    """AUC of ictal (1.0) vs interictal (0.0), dropping soft transition labels."""
+    import numpy as np
+    s = np.asarray(scores, dtype=float)
+    y = np.asarray(labels, dtype=float)
+    keep = (y == 0.0) | (y == 1.0)
+    if keep.sum() == 0:
+        return float("nan")
+    return roc_auc(s[keep], y[keep] == 1.0)

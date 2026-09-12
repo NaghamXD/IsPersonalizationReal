@@ -298,8 +298,14 @@ HN_A_BASE_STD_SCALE = 1e-2
 # =============================================================================
 S1_LOSS = "huber"                # [METHOD] Huber for training
 S1_HUBER_DELTA = 1.0
-S1_SELECTION_METRIC = "mse"      # [DECISION] MSE for checkpoint selection, so the
-                                 #   number stays comparable to the paper's RMSE
+# [DECISION] Checkpoint selection and early stopping use validation AUC; MSE is
+#   logged alongside so the number stays comparable to the paper's reported RMSE.
+#
+#   MSE is dominated by the label distribution, while detection consumes a RANKING:
+#   the accumulation rule asks whether ictal clips score above interictal ones. The
+#   two came apart badly -- the checkpoint chosen by best validation MSE scored
+#   AUC 0.513, chance. Selecting on MSE was picking models that cannot discriminate.
+S1_SELECTION_METRIC = "auc"      # "auc" | "mse"
 S1_OPTIMIZER = "adamw"
 S1_LR = 1e-4                     # [PAPER] 1e-4
 S1_WEIGHT_DECAY = 0.05

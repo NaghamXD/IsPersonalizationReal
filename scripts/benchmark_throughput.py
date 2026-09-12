@@ -14,6 +14,7 @@ This measures the three numbers that decide it:
     python scripts/benchmark_throughput.py
 """
 import argparse
+import contextlib
 import sys
 import time
 from pathlib import Path
@@ -50,6 +51,10 @@ def main():
     ap.add_argument("--batches", type=int, default=20)
     ap.add_argument("--workers", type=int, nargs="*", default=[0, 2, 4, 8])
     ap.add_argument("--batch-size", type=int, default=config.S1_BATCH_SIZE)
+    ap.add_argument("--sweep", action="store_true",
+                    help="also sweep batch size x autocast, the two levers that can "
+                         "actually move a compute-bound workload")
+    ap.add_argument("--sweep-batches", type=int, nargs="*", default=[16, 32, 64])
     args = ap.parse_args()
 
     device = get_device()
@@ -128,6 +133,64 @@ def main():
         print(f"  3. train step, num_workers={w:<2}        {per_batch*1000:>8.0f} ms/batch"
               f"   -> {epoch_s:>6.0f} s/epoch")
         del it, dl
+
+    # ---- 4. the two levers that matter when compute-bound --------------------
+    if args.sweep:
+        print("\n  4. batch size x autocast (compute only, one cached batch reused)")
+        print(f"     {'batch':>6}{'dtype':>10}{'ms/batch':>11}{'ms/clip':>10}"
+              f"{'s/epoch':>10}{'vs base':>10}")
+        base_ms_per_clip = compute_s * 1000 / args.batch_size
+        results = []
+        for bs in args.sweep_batches:
+            dl = DataLoader(ds, batch_size=bs, shuffle=False, num_workers=0)
+            try:
+                sample, labels = next(iter(dl))
+            except Exception as e:
+                print(f"     batch {bs}: cannot build a batch ({e})")
+                continue
+            d, k = sample["data"].to(device), sample["kpts"].to(device)
+            lab = labels.float().to(device)
+            for use_amp in (False, True):
+                ctx = (torch.autocast(device_type=device.type, dtype=torch.float16)
+                       if use_amp else contextlib.nullcontext())
+                try:
+                    for _ in range(3):
+                        with ctx:
+                            o = model(d, k)
+                            l = crit(o.squeeze() if o.dim() > 1 else o, lab)
+                        opt.zero_grad(); l.backward(); opt.step()
+                    sync(device)
+                    t0 = time.time()
+                    for _ in range(max(5, args.batches // 2)):
+                        with ctx:
+                            o = model(d, k)
+                            l = crit(o.squeeze() if o.dim() > 1 else o, lab)
+                        opt.zero_grad(); l.backward(); opt.step()
+                    sync(device)
+                    n_it = max(5, args.batches // 2)
+                    ms = (time.time() - t0) / n_it * 1000
+                except Exception as e:
+                    print(f"     {bs:>6}{'fp16' if use_amp else 'fp32':>10}"
+                          f"   FAILED: {type(e).__name__}: {str(e)[:60]}")
+                    continue
+                ms_clip = ms / bs
+                ep = ms_clip * len(ds) / 1000
+                speed = base_ms_per_clip / ms_clip
+                print(f"     {bs:>6}{'fp16' if use_amp else 'fp32':>10}{ms:>11.0f}"
+                      f"{ms_clip:>10.1f}{ep:>10.0f}{speed:>9.2f}x")
+                results.append((bs, use_amp, ep, speed))
+            del d, k, lab, dl
+        if results:
+            bs, amp, ep, speed = min(results, key=lambda r: r[2])
+            print(f"\n     fastest: batch={bs} "
+                  f"{'fp16 autocast' if amp else 'fp32'} at {ep:.0f} s/epoch "
+                  f"({speed:.2f}x the current configuration)")
+            for n in (50, 100, 200, 300):
+                print(f"       8 folds x {n:>3} epochs -> {8*n*ep/3600:>6.1f} h")
+            print("\n     NOTE: a larger batch means FEWER gradient steps per epoch. "
+                  "If steps\n     are what this model is short of, epochs are not "
+                  "interchangeable across\n     batch sizes -- compare at equal step "
+                  "counts, not equal epochs.")
 
     w, per_batch, epoch_s = best
     overhead = max(0.0, per_batch - compute_s)

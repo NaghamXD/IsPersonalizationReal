@@ -197,11 +197,33 @@ def test_exposure_disparity_is_visible():
           f"for the SAME single false alarm)")
 
 
+def test_roc_auc():
+    """AUC must be exact, tie-correct, and threshold-free."""
+    from src.eval.metrics import auc_from_labels, roc_auc
+
+    assert roc_auc([1, 2, 3, 4], [0, 0, 1, 1]) == 1.0        # perfect separation
+    assert roc_auc([4, 3, 2, 1], [0, 0, 1, 1]) == 0.0        # perfectly inverted
+    assert roc_auc([1, 1, 1, 1], [0, 0, 1, 1]) == 0.5        # all tied -> chance
+    assert roc_auc([1, 2, 3, 4], [0, 1, 0, 1]) == 0.75
+    # A constant predictor scores exactly chance no matter the threshold -- this is
+    # the property MSE lacks, and why selection moved to AUC.
+    assert roc_auc([0.44] * 100, [0] * 50 + [1] * 50) == 0.5
+    # Monotone rescaling cannot change it.
+    import numpy as np
+    rng = np.random.default_rng(0)
+    s = rng.random(200); y = (rng.random(200) < 0.4).astype(int)
+    assert np.isclose(roc_auc(s, y), roc_auc(s * 3.7 + 11.0, y))
+    # Soft transition labels are dropped, not silently bucketed.
+    assert auc_from_labels([1, 2, 3, 4, 5], [0.0, 0.5, 1.0, 0.3, 1.0]) == \
+        roc_auc([1, 3, 5], [0, 1, 1])
+    print("  OK  roc_auc exact, tie-correct, scale-invariant")
+
+
 if __name__ == "__main__":
     for fn in [test_decision_times, test_units_are_seconds_regression,
                test_accumulate_mean, test_accumulate_is_causal_and_order_free,
                test_alarm_grouping, test_metrics_detection_and_exposure,
                test_post_ictal_exclusion, test_aggregate_rate_arithmetic,
-               test_exposure_disparity_is_visible]:
+               test_exposure_disparity_is_visible, test_roc_auc]:
         fn()
     print("\nALL EVAL TESTS PASSED")
