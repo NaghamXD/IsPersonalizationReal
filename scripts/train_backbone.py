@@ -89,6 +89,40 @@ def load_fold(patient):
 
 
 @torch.no_grad()
+def evaluate_batch_stats(model, loader, device):
+    """Same data, but BatchNorm uses BATCH statistics instead of running ones.
+
+    Comparing this against evaluate() isolates a BatchNorm train/eval gap from a
+    genuine failure to fit. They answer different questions and need opposite fixes:
+    a large gap means the running statistics have not converged (train longer, or more
+    updates per epoch); no gap means the model really cannot fit the data.
+
+    Running-stat buffers are saved and restored, so this measurement cannot itself
+    perturb the statistics it is measuring.
+    """
+    bns = [m for m in model.modules()
+           if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))]
+    saved = [(m.running_mean.clone(), m.running_var.clone(),
+              int(m.num_batches_tracked.item())) for m in bns]
+    was_training = model.training
+    model.train()
+    total, n = 0.0, 0
+    for sample, labels in loader:
+        out = model(sample["data"].to(device), sample["kpts"].to(device))
+        if out.dim() > 1:
+            out = out.squeeze(1)
+        labels = labels.float().to(device)
+        total += torch.nn.functional.mse_loss(out, labels, reduction="sum").item()
+        n += labels.numel()
+    for m, (rm, rv, nb) in zip(bns, saved):
+        m.running_mean.copy_(rm)
+        m.running_var.copy_(rv)
+        m.num_batches_tracked.fill_(nb)
+    model.train(was_training)
+    return total / max(n, 1)
+
+
+@torch.no_grad()
 def evaluate(model, loader, device):
     """Pooled MSE on the validation patients.
 
@@ -199,7 +233,8 @@ def train_fold(patient, args, device):
         return
 
     model.train()
-    for epoch in range(start_epoch, config.S1_MAX_EPOCHS):
+    max_epochs = args.overfit_epochs if args.overfit else config.S1_MAX_EPOCHS
+    for epoch in range(start_epoch, max_epochs):
         t0, running, nb = time.time(), 0.0, 0
         for bi, (sample, labels) in enumerate(train_loader):
             if args.limit_batches and bi >= args.limit_batches:
@@ -218,6 +253,7 @@ def train_fold(patient, args, device):
 
         train_loss = running / max(nb, 1)
         val_mse = evaluate(model, val_loader, device)
+        val_bn = evaluate_batch_stats(model, val_loader, device) if args.overfit else None
         dt = time.time() - t0
         history["train_loss"].append(train_loss)
         history["val_mse"].append(val_mse)
@@ -230,10 +266,16 @@ def train_fold(patient, args, device):
             torch.save(model.state_dict(), path_best)
         else:
             trigger += 1
-        print(f"  epoch {epoch+1:>3}/{config.S1_MAX_EPOCHS}  "
-              f"huber={train_loss:.5f}  val_mse={val_mse:.5f} "
-              f"(rmse={100*val_mse**0.5:.2f}%)  lr={history['lr'][-1]:.2e}  "
-              f"{dt:.0f}s  {'** best' if improved else f'no improve {trigger}/{config.S1_PATIENCE}'}")
+        if args.overfit:
+            if (epoch + 1) % 20 == 0 or epoch < 3:
+                print(f"  epoch {epoch+1:>4}/{max_epochs}  huber={train_loss:.5f}  "
+                      f"mse[running_stats]={val_mse:.5f}  mse[batch_stats]={val_bn:.5f}"
+                      f"  gap={val_mse - val_bn:+.5f}")
+        else:
+            print(f"  epoch {epoch+1:>4}/{max_epochs}  "
+                  f"huber={train_loss:.5f}  val_mse={val_mse:.5f} "
+                  f"(rmse={100*val_mse**0.5:.2f}%)  lr={history['lr'][-1]:.2e}  "
+                  f"{dt:.0f}s  {'** best' if improved else f'no improve {trigger}/{config.S1_PATIENCE}'}")
 
         torch.save({"epoch": epoch, "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
@@ -248,6 +290,28 @@ def train_fold(patient, args, device):
             print(f"  early stop at epoch {epoch+1} "
                   f"({config.S1_PATIENCE} epochs without improvement)")
             break
+
+    if args.overfit:
+        final_run = evaluate(model, val_loader, device)
+        final_bn = evaluate_batch_stats(model, val_loader, device)
+        n_steps = len(history["val_mse"]) * max(nb, 1)
+        print(f"\n  --- overfit verdict ({args.overfit} clips, ~{n_steps} gradient steps) ---")
+        print(f"  final MSE, running stats : {final_run:.5f}  (RMSE {100*final_run**0.5:.2f}%)")
+        print(f"  final MSE, batch stats   : {final_bn:.5f}  (RMSE {100*final_bn**0.5:.2f}%)")
+        if final_bn < 0.01:
+            verdict = ("CAN fit. The model memorises what it is shown, so gradients, "
+                       "data and architecture are sound.")
+        elif final_bn < 0.05:
+            verdict = "PARTIALLY fits -- capacity reaches the data but slowly."
+        else:
+            verdict = ("CANNOT fit even a handful of clips. The fault is structural "
+                       "(data, gradient path or architecture), not hyperparameters.")
+        print(f"  verdict: {verdict}")
+        if final_run - final_bn > 0.02:
+            print(f"  NOTE: a {final_run - final_bn:.3f} gap between the two means "
+                  f"BatchNorm running statistics have not converged. With {args.overfit} "
+                  f"clips there are only a couple of updates per epoch; this gap is an "
+                  f"artefact of the probe, not of the real training runs.")
 
     write_manifest(ckpt_dir / "run_manifest.json", seed=seed,
                    extra={"stage": "6_backbone", "fold": patient,
@@ -268,6 +332,9 @@ def main():
                     help="cap batches per epoch (timing probe only, not a real run)")
     ap.add_argument("--restart", action="store_true",
                     help="ignore an existing checkpoint and start over")
+    ap.add_argument("--overfit-epochs", type=int, default=400,
+                    help="epoch budget for --overfit. 50 epochs on 32 clips is only "
+                         "100 gradient steps, which tests nothing.")
     ap.add_argument("--overfit", type=int, default=None, metavar="N",
                     help="SANITY CHECK: train on N fixed clips and evaluate on those "
                          "same N. A working pipeline drives this loss to ~0. If it "
