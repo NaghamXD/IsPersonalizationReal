@@ -72,7 +72,9 @@ def resolve_checkpoint(root: Path, patient: str) -> Path:
     `{Capitalised}/best_model.pth`, so it found nothing and reported an empty run as
     though it had succeeded. Search the plausible spellings and fail loudly.
     """
-    stems = ["best_model.pth", "best.pth", "hypernetwork_best.pth"]
+    # final_model.pth is the D21 last-k average and takes precedence: under the fixed
+    # budget there is no "best" epoch, and best_model.pth is written as a copy of it.
+    stems = ["final_model.pth", "best_model.pth", "best.pth", "hypernetwork_best.pth"]
     dirs = [patient, patient.capitalize(), patient.lower(), patient.upper()]
     tried = []
     for d in dict.fromkeys(dirs):

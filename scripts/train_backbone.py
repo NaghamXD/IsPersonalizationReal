@@ -180,11 +180,13 @@ def train_fold(patient, args, device):
     path_last = ckpt_dir / "last_checkpoint.pth"
     path_log = ckpt_dir / "training_log.json"
     path_val_scores = ckpt_dir / "val_scores_by_epoch.npz"
+    path_final = ckpt_dir / "final_model.pth"
 
     train_ds = VSViGDataset(config.PROCESSED_DIR, train_file)
     val_ds = VSViGDataset(config.PROCESSED_DIR, val_file)
     # Recording id per validation clip, in file order. The val loader uses
     # shuffle=False and no drop_last, so loader order == file order.
+    recent_states = []                      # last k epochs, for D21 weight averaging
     val_clip_list = json.loads(Path(val_file).read_text())
     val_sources = [source_id(n) for n, _ in val_clip_list]
     val_score_rows = []
@@ -333,7 +335,9 @@ def train_fold(patient, args, device):
         improved = (select == select) and select > best_val
         if improved:
             best_val, trigger = select, 0
-            torch.save(model.state_dict(), path_best)
+            torch.save(model.state_dict(),
+                       path_best if getattr(config, "S1_EARLY_STOP", True)
+                       else ckpt_dir / "best_by_val.pth")
         elif epoch + 1 <= config.S1_PATIENCE_WARMUP_EPOCHS:
             # Warm-up: track the best checkpoint, but do not let these epochs burn
             # patience. BatchNorm running statistics are still converging here, so an
@@ -374,6 +378,18 @@ def train_fold(patient, args, device):
 
         if args.overfit:
             continue
+
+        # D21: periodic weights and a rolling window of the last k, so that any later
+        # question about budget or selection is answered from disk, not from a rerun.
+        if config.S1_CHECKPOINT_EVERY and (epoch + 1) % config.S1_CHECKPOINT_EVERY == 0:
+            torch.save(model.state_dict(), ckpt_dir / f"epoch_{epoch+1:03d}.pth")
+        if config.S1_WEIGHT_AVG_LAST:
+            recent_states.append({k: v.detach().cpu().clone()
+                                  for k, v in model.state_dict().items()})
+            recent_states[:] = recent_states[-config.S1_WEIGHT_AVG_LAST:]
+
+        if not getattr(config, "S1_EARLY_STOP", True):
+            continue
         if trigger >= config.S1_PATIENCE:
             print(f"  early stop at epoch {epoch+1} "
                   f"({config.S1_PATIENCE} epochs without an AUC improvement; "
@@ -402,6 +418,45 @@ def train_fold(patient, args, device):
                   f"clips there are only a couple of updates per epoch; this gap is an "
                   f"artefact of the probe, not of the real training runs.")
 
+    # ---------------------------------------------------------------- D21 averaging
+    if recent_states and not args.overfit:
+        avg = {k: torch.stack([sd[k].float() for sd in recent_states]).mean(0)
+               for k in recent_states[0]
+               if recent_states[0][k].is_floating_point()}
+        for k, v in recent_states[-1].items():          # ints (num_batches_tracked) etc.
+            avg.setdefault(k, v)
+        model.load_state_dict({k: v.to(dtype=recent_states[-1][k].dtype) for k, v in avg.items()})
+
+        # Averaged weights carry averaged BatchNorm running statistics, which do not
+        # correspond to any actual forward pass. Recompute them over the training data
+        # -- one no-grad pass, the standard SWA step. Skipping it is the usual reason
+        # weight averaging appears not to work.
+        bns = [m for m in model.modules()
+               if isinstance(m, torch.nn.modules.batchnorm._BatchNorm)]
+        moms = [m.momentum for m in bns]
+        for m in bns:
+            m.reset_running_stats()
+            m.momentum = None                            # cumulative average
+        model.train()
+        cap = getattr(config, "S1_BN_RECAL_BATCHES", None)
+        with torch.no_grad():
+            for bi, (sample, _) in enumerate(train_loader):
+                if cap and bi >= cap:
+                    break
+                model(sample["data"].to(device), sample["kpts"].to(device))
+        for m, mo in zip(bns, moms):
+            m.momentum = mo
+        torch.save(model.state_dict(), path_final)
+        torch.save(model.state_dict(), path_best)        # what evaluate.py resolves
+        mse_a, auc_a, ws_a, _ = evaluate(model, val_loader, device, val_sources)
+        print(f"  D21: averaged the last {len(recent_states)} epochs and recalibrated "
+              f"BatchNorm -> {path_final.name}")
+        print(f"       averaged model on validation: within-source {ws_a:.4f} "
+              f"(pooled {auc_a:.4f}, MSE {mse_a:.5f})")
+        history["averaged_val_auc_within"] = ws_a
+        history["averaged_val_auc_pooled"] = auc_a
+        path_log.write_text(json.dumps(history, indent=2))
+
     write_manifest(ckpt_dir / "run_manifest.json", seed=seed,
                    extra={"stage": "6_backbone", "fold": patient,
                           "val_patients": fold["val_patients"],
@@ -419,9 +474,18 @@ def train_fold(patient, args, device):
     if sel:
         i = int(max(range(len(sel)), key=lambda k: (sel[k] == sel[k], sel[k])))
         other = history["val_auc"][i] if key == "val_auc_within" else history["val_auc_within"][i]
-        print(f"  saved epoch {i+1}: {key}={sel[i]:.4f} (pooled {other:.4f}, "
-              f"MSE {history['val_mse'][i]:.5f}, RMSE {100*history['val_mse'][i]**0.5:.2f}%)"
-              f" -> {path_best}")
+        if getattr(config, "S1_EARLY_STOP", True):
+            print(f"  saved epoch {i+1}: {key}={sel[i]:.4f} (pooled {other:.4f}, "
+                  f"MSE {history['val_mse'][i]:.5f}, "
+                  f"RMSE {100*history['val_mse'][i]**0.5:.2f}%) -> {path_best}")
+        else:
+            # D21: nothing was selected. Report the argmax only so the run can be
+            # compared with the pre-D21 ones; it is NOT the evaluated model.
+            print(f"  no selection (D21 fixed budget). For reference only, the best "
+                  f"single epoch was {i+1} at {key}={sel[i]:.4f}; it is saved as "
+                  f"best_by_val.pth and is NOT what gets evaluated.")
+            print(f"  evaluated model = final_model.pth (last "
+                  f"{config.S1_WEIGHT_AVG_LAST}-epoch average, BatchNorm recalibrated)")
         # The max of a noisy per-epoch metric is an optimistic estimate of the model's
         # level. Quote the plateau beside it so the selected value is never mistaken
         # for an unbiased one; only the held-out patient gives that.

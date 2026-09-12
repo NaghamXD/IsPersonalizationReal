@@ -514,6 +514,48 @@ It says that for pat01 the cohort model transfers no usable ranking, and that we
 currently pick a checkpoint that would change this.
 
 
+## D21. Fixed pre-registered budget: 50 epochs, no early stopping, no selection
+
+**Date:** 2026-09-12, resolving D20.
+
+D20 established that the internal validation set cannot select a checkpoint. D21 stops
+trying. Every fold runs a fixed 50 epochs; the evaluated model is the average of the
+last 5 epochs' weights with BatchNorm running statistics recomputed afterwards.
+
+**Why 50.** Both pat01 runs plateaued by epoch 30-40. 50 leaves margin and, more
+importantly, lets the cosine schedule actually anneal: with `T_max = S1_MAX_EPOCHS =
+300` the learning rate had moved only 1e-4 -> 9.1e-5 by epoch 59, so the schedule was
+doing nothing at all. At T_max = 50 it reaches `eta_min`.
+
+**Why averaging, and why the BatchNorm pass.** Averaged weights carry averaged
+BatchNorm running statistics, which correspond to no forward pass the network ever
+made. Recomputing them over training batches is the standard SWA step and skipping it
+is the usual reason weight averaging looks ineffective. Capped at 100 batches
+(1600 clips) -- far more than running averages need.
+
+**Why this makes the section 3.5 claim stronger, not weaker.** The claim is a paired
+difference, baseline minus adapted, per patient. Under per-epoch selection each arm
+draws its checkpoint from a signal uncorrelated with held-out performance, so the
+difference carries two independent noise terms and the correlation against atypicality
+inherits both. A fixed rule applied identically to both arms removes them by
+construction. **The rule is now pre-registered and must not differ between arms.**
+
+**Consequence worth stating.** With no selection, the internal validation patients are
+not used to choose anything. They stop being contaminated and become ordinary unseen
+patients. Each fold therefore yields three held-out measurements, and across eight
+folds every patient is measured roughly three times under different training sets -- so
+per-patient difficulty gets a variance, not a point estimate.
+
+**Insurance against another retrain.** Weights are written every 10 epochs, and
+`val_scores_by_epoch.npz` holds every validation clip's score at every epoch. A later
+change to the metric, the selection rule or the budget (within 50) is answerable from
+disk. What would still force a rerun is a change to the learning rate, the sampler, the
+architecture or the data.
+
+**Cost.** 12.1 h for all eight folds, measured from the one timed fold and scaled by
+each fold's clip counts (pat02 1.14 h to pat04 1.71 h). 1.6 GB of checkpoints.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
@@ -526,9 +568,9 @@ currently pick a checkpoint that would change this.
   criterion, held identical between baseline and adapted.
 - **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is
   applied per patient or pooled. Blocking for Stage 5's gate.
-- **Checkpoint selection (D20)** — blocking for Stage 7. Baseline and adapted must be
-  trained under one identical, pre-registered rule, and the current per-epoch rule
-  demonstrably selects noise.
+- ~~Checkpoint selection (D20)~~ — resolved by D21 (fixed 50-epoch budget, last-5
+  weight averaging, no selection). The rule is pre-registered and must be identical
+  for the baseline and the adapted model.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
   what exposure floor, once real FDR/h numbers exist.
 - **A_base initialisation** — the draft's `N(0, d_in⁻¹ × 10⁻²)` is ambiguous between a

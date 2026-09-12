@@ -334,7 +334,26 @@ S1_NUM_WORKERS = 2
 #   300 is a CAP, not a target. Fold 1 runs against it with per-epoch validation AUC
 #   logged; the budget for folds 2-8 is then set from where that curve actually
 #   plateaus. Fold 1 is a real fold, so none of it is wasted.
-S1_MAX_EPOCHS = 300
+# [DECISION D21] Fixed pre-registered budget, no early stopping, no per-epoch
+#   selection. D20 established that the internal validation set (2 patients under LOPO)
+#   cannot select a checkpoint: its two per-patient curves are uncorrelated after
+#   warm-up (corr -0.185), and the three checkpoints tried on fold 1 ranked INVERSELY
+#   to their validation scores on the held-out patient. Selecting on noise adds a
+#   variance term to every number, and section 3.5 is a PAIRED difference -- baseline
+#   minus adapted -- so that term would land directly in the headline claim.
+#   Both pat01 runs plateaued by epoch 30-40; 50 leaves margin and lets the cosine
+#   schedule actually anneal (at T_max=300 the LR had only moved 1e-4 -> 9.1e-5 by
+#   epoch 59, i.e. the schedule was doing nothing).
+S1_MAX_EPOCHS = 50
+S1_EARLY_STOP = False            # D21: run the full budget on every fold
+S1_CHECKPOINT_EVERY = 10         # periodic weights, so a later change of mind about
+                                 # the budget or the selection rule costs no retraining
+S1_WEIGHT_AVG_LAST = 5           # average the last k epochs, then recalibrate BatchNorm
+# Batches used to recompute BatchNorm running statistics after averaging. Averaged
+# weights carry averaged running stats, which correspond to no actual forward pass;
+# skipping this step is the usual reason weight averaging appears not to help. 100
+# batches is 1600 clips -- far more than the running averages need, and cheap.
+S1_BN_RECAL_BATCHES = 100
 
 # [DECISION] A single smooth cosine decay over the whole budget, NOT warm restarts.
 #
