@@ -494,6 +494,20 @@ Whichever is chosen, it must be **identical for the baseline and the adapted mod
 The §3.5 claim is a paired difference; if the two arms select checkpoints under
 different amounts of noise, the difference measures the selection rule.
 
+**pat01 is not representative.** The fold-1 checkpoint was scored against all eight
+patients (`outputs/results/baseline/fold1_model_all_patients.md`). It is at chance on
+pat01 alone: the two patients it never trained on score 0.966 and 1.000 under the
+selected checkpoint and 0.860-0.890 and 0.762 under a non-selected one, while the five
+training patients sit at 0.997-1.000. So the spread across *unseen* patients is roughly
+0.50 to 0.90 — large, and pat01 is its floor. No conclusion about the cohort baseline
+should rest on fold 1.
+
+**A consequence that changes the arithmetic of option 1.** Under a fixed pre-registered
+budget with no early stopping, the internal validation patients are not used to choose
+anything. They stop being selection-contaminated and become ordinary unseen patients.
+Each fold then yields **three** honest held-out measurements instead of one, at no extra
+compute.
+
 **What this does not say.** It does not say the backbone is untrainable — it reaches
 1.000 within-recording AUC on patients it has seen, and 0.76-0.89 on pat04 and pat07.
 It says that for pat01 the cohort model transfers no usable ranking, and that we cannot
