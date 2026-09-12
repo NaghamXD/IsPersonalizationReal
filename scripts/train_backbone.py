@@ -187,10 +187,13 @@ def train_fold(patient, args, device):
     # drop_last: BatchNorm in training mode needs more than one sample, and a dataset
     # size leaving exactly one leftover would crash on the last batch of every epoch.
     if not args.overfit:
+        nw = config.S1_NUM_WORKERS
+        extra = dict(persistent_workers=True, prefetch_factor=4) if nw > 0 else {}
         train_loader = DataLoader(train_ds, batch_size=config.S1_BATCH_SIZE,
-                                  sampler=sampler, num_workers=0, drop_last=True)
+                                  sampler=sampler, num_workers=nw, drop_last=True,
+                                  **extra)
         val_loader = DataLoader(val_ds, batch_size=config.S1_BATCH_SIZE,
-                                shuffle=False, num_workers=0)
+                                shuffle=False, num_workers=nw, **extra)
 
     model = VSViG_base(kpt_channels=config.KPT_CHANNELS).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.S1_LR,

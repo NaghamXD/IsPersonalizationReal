@@ -294,11 +294,46 @@ Whatever is chosen, DT must be **identical for the baseline and the adapted mode
 within a fold, or the section 3.5 comparison measures threshold placement rather than
 personalisation.
 
+## D17. The backbone was trained for ~3% of the reference budget — OPEN
+
+**Established by diagnosis, fix not yet chosen.**
+
+The first pat01 runs produced AUC(ictal vs interictal) = 0.513 on the held-out patient
+— chance — with all three classes sharing one output distribution. Three candidate
+causes were eliminated in turn rather than guessed at:
+
+- **Data.** `scripts/diagnose_data.py`: 67–97% keypoint validity, patch means 0.17–0.26
+  with real variance, no dead joints, normalised keypoints spanning [−1.29, 1.97] torso
+  units with 6.7% zeroed. Pose estimation found the patient.
+- **Weight decay.** Ruled out analytically, without spending compute: AdamW's decoupled
+  decay shrinks weights by `(1 − lr·wd) = 1 − 5e−6` per step, so over the ~960 steps of
+  the real run the total factor is 0.995.
+- **Structure.** `--overfit 32` drove MSE to 0.00005 (RMSE 0.71%). The model memorises
+  what it is shown, so gradients, architecture and the data path are sound.
+
+**What remains is budget.** The same probe showed the model learns slowly at lr 1e-4:
+memorising 32 clips took ~400 gradient steps to reach MSE 0.01 and ~800 to reach 0.0001.
+The real run did **960 steps in total**. The paper's 200 epochs at 160 batches/epoch is
+roughly **32,000**. Training ran for about 3% of the reference schedule and then
+early-stopped on a validation signal still contaminated by BatchNorm warm-up.
+
+Naively raising the budget costs 127 s/epoch × 200 epochs × 8 folds ≈ **56 h**, which is
+not acceptable. So the budget question is really a throughput question first:
+`num_workers=0` means every batch stalls the main thread on 16 synchronous reads of
+~5.5 MB clips before any compute begins. `scripts/benchmark_throughput.py` separates
+compute from I/O and reports the achievable epoch time.
+
+**Decide once that measurement exists:** the epoch budget, the patience policy (patience
+5 fired at epoch 6 on a signal that had not stabilised), and whether to raise the
+learning rate with warmup rather than only buying more steps.
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
   dry-run only.
 - **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
+- **Training budget, throughput and patience policy (D17)** — blocking for
+  Stage 6; nothing downstream is interpretable from a 3%-budget backbone.
 - **Decision threshold selection (D16)** — inherit 0.3, or select per fold on
   the internal validation patients under a stated operating criterion.
 - **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is

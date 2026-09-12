@@ -1,0 +1,145 @@
+"""Where does an epoch actually go -- disk or compute?
+
+The overfit probe established that the model CAN learn but needs far more gradient
+steps than it was given. Raising the epoch budget is therefore the fix, and the
+question becomes whether that is affordable. It is only affordable if the bottleneck
+is not what it currently looks like: num_workers=0 means every batch loads 16 clips of
+roughly 5.5 MB each from disk, synchronously, before any compute begins.
+
+This measures the three numbers that decide it:
+  1. pure compute      -- forward+backward on one cached batch, repeated
+  2. pure data loading -- iterate the loader, touch no model
+  3. combined          -- at several worker counts
+
+    python scripts/benchmark_throughput.py
+"""
+import argparse
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+
+import config
+from src.data.dataset import VSViGDataset
+from src.model.vsvig import VSViG_base
+
+
+def get_device():
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
+def sync(device):
+    if device.type == "mps":
+        torch.mps.synchronize()
+    elif device.type == "cuda":
+        torch.cuda.synchronize()
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--fold", type=str, default="pat01")
+    ap.add_argument("--batches", type=int, default=20)
+    ap.add_argument("--workers", type=int, nargs="*", default=[0, 2, 4, 8])
+    ap.add_argument("--batch-size", type=int, default=config.S1_BATCH_SIZE)
+    args = ap.parse_args()
+
+    device = get_device()
+    train_file = Path(config.FOLDS_DIR) / args.fold / "train_clips.json"
+    ds = VSViGDataset(config.PROCESSED_DIR, train_file)
+    print(f"[env] device={device}  dataset={len(ds)} clips  batch={args.batch_size}  "
+          f"timing {args.batches} batches per configuration\n")
+
+    model = VSViG_base(kpt_channels=config.KPT_CHANNELS).to(device)
+    opt = torch.optim.AdamW(model.parameters(), lr=config.S1_LR)
+    crit = nn.HuberLoss(delta=config.S1_HUBER_DELTA)
+
+    # ---- 1. pure compute, one batch held in memory and reused -------------
+    loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    sample, labels = next(iter(loader))
+    data, kpts = sample["data"].to(device), sample["kpts"].to(device)
+    labels = labels.float().to(device)
+    for _ in range(3):                                   # warm up kernels
+        out = model(data, kpts)
+        crit(out.squeeze() if out.dim() > 1 else out, labels).backward()
+        opt.zero_grad()
+    sync(device)
+    t0 = time.time()
+    for _ in range(args.batches):
+        out = model(data, kpts)
+        loss = crit(out.squeeze() if out.dim() > 1 else out, labels)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    sync(device)
+    compute_s = (time.time() - t0) / args.batches
+    print(f"  1. compute only (cached batch)      {compute_s*1000:>8.0f} ms/batch")
+
+    # ---- 2. data loading only, no model ----------------------------------
+    for w in args.workers:
+        kw = dict(num_workers=w)
+        if w > 0:
+            kw.update(persistent_workers=True, prefetch_factor=4)
+        dl = DataLoader(ds, batch_size=args.batch_size, shuffle=True, **kw)
+        it = iter(dl)
+        for _ in range(3):
+            next(it)
+        t0 = time.time()
+        for _ in range(args.batches):
+            next(it)
+        load_s = (time.time() - t0) / args.batches
+        del it, dl
+        print(f"  2. data only, num_workers={w:<2}          {load_s*1000:>8.0f} ms/batch"
+              f"   -> epoch would cost {load_s*len(ds)/args.batch_size:>6.0f} s in I/O alone")
+
+    # ---- 3. combined -----------------------------------------------------
+    print()
+    best = None
+    for w in args.workers:
+        kw = dict(num_workers=w)
+        if w > 0:
+            kw.update(persistent_workers=True, prefetch_factor=4)
+        dl = DataLoader(ds, batch_size=args.batch_size, shuffle=True, drop_last=True, **kw)
+        it = iter(dl)
+        next(it)
+        sync(device)
+        t0 = time.time()
+        for _ in range(args.batches):
+            sample, labels = next(it)
+            out = model(sample["data"].to(device), sample["kpts"].to(device))
+            loss = crit(out.squeeze() if out.dim() > 1 else out,
+                        labels.float().to(device))
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        sync(device)
+        per_batch = (time.time() - t0) / args.batches
+        epoch_s = per_batch * len(ds) / args.batch_size
+        if best is None or per_batch < best[1]:
+            best = (w, per_batch, epoch_s)
+        print(f"  3. train step, num_workers={w:<2}        {per_batch*1000:>8.0f} ms/batch"
+              f"   -> {epoch_s:>6.0f} s/epoch")
+        del it, dl
+
+    w, per_batch, epoch_s = best
+    overhead = max(0.0, per_batch - compute_s)
+    print(f"\n  --- verdict ---")
+    print(f"  best: num_workers={w} at {epoch_s:.0f} s/epoch "
+          f"(compute floor {compute_s*len(ds)/args.batch_size:.0f} s/epoch)")
+    print(f"  non-compute overhead: {overhead*1000:.0f} ms/batch "
+          f"({100*overhead/per_batch:.0f}% of a step)")
+    for ep in (50, 100, 200):
+        print(f"  8 folds x {ep:>3} epochs -> {8*ep*epoch_s/3600:>6.1f} h")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

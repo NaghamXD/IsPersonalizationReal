@@ -304,6 +304,11 @@ S1_OPTIMIZER = "adamw"
 S1_LR = 1e-4                     # [PAPER] 1e-4
 S1_WEIGHT_DECAY = 0.05
 S1_BATCH_SIZE = 16
+# [DECISION] DataLoader workers. Each clip is ~5.5 MB of float32 on disk, so at
+#   num_workers=0 every batch stalls the main thread on 16 synchronous file reads
+#   before any compute starts. Measure with scripts/benchmark_throughput.py and set
+#   this to whatever that reports as best on the training machine.
+S1_NUM_WORKERS = 0
 S1_MAX_EPOCHS = 50               # [DECISION] compute ceiling
 
 # [DECISION] A single smooth cosine decay over the whole budget, NOT warm restarts.
