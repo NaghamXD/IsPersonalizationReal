@@ -1,12 +1,12 @@
 {
-  "written_at": "2026-09-13T20:21:19.811673+00:00",
+  "written_at": "2026-09-13T20:36:42.224471+00:00",
   "git": {
-    "commit": "bdc7e9e51fc83ccd63d4ef362a2e6303c1e9c554",
+    "commit": "ebb86770b6f65db5613cf97699881416a42fe5ab",
     "branch": "main",
     "dirty": true
   },
-  "python": "3.10.12 (main, Aug 31 2026, 10:18:17) [GCC 11.4.0]",
-  "platform": "Linux-6.8.0-136-generic-aarch64-with-glibc2.35",
+  "python": "3.11.16 (main, Sep  2 2026, 23:33:55) [Clang 21.1.8 ]",
+  "platform": "macOS-26.5.2-arm64-arm-64bit",
   "seed": 2337,
   "config": {
     "ABLATION_FOLDS": [
@@ -48,7 +48,7 @@
       "pat09"
     ],
     "CONTEXT_DIM": 128,
-    "DATA_ROOT": "/sessions/rcw-01ruyojxhwzf9v3rnfxmwqpn/mnt/WU-SAHZU-EMU-Video/dataset",
+    "DATA_ROOT": "/Users/naghamdaood/Projects/VSViG/WU-SAHZU-EMU-Video/dataset",
     "DECISION_THRESHOLD": 0.3,
     "DETECTION_TIME_REF": "clip_end",
     "DETECTION_WINDOW_AFTER_CLINICAL_S": 120.0,
@@ -156,7 +156,7 @@
     "KPT_NORMALISATION": "midhip_torso",
     "LABELS_JSON": "processed_data/labels.json",
     "LABEL_AT_CLIP_END": true,
-    "LABEL_XLSX": "/sessions/rcw-01ruyojxhwzf9v3rnfxmwqpn/mnt/WU-SAHZU-EMU-Video/dataset/Label.xlsx",
+    "LABEL_XLSX": "/Users/naghamdaood/Projects/VSViG/WU-SAHZU-EMU-Video/dataset/Label.xlsx",
     "MIDHIP_JOINTS": [
       9,
       12
@@ -180,7 +180,7 @@
     "PROJECTOR_IN_DIM": 384,
     "PROJECTOR_SEED": 42,
     "REFRACTORY_S": 60.0,
-    "REPO_ROOT": "/sessions/rcw-01ruyojxhwzf9v3rnfxmwqpn/mnt/IsPersonalizationReal",
+    "REPO_ROOT": "/Users/naghamdaood/Projects/IsPersonalizationReal",
     "RESULTS_DIR": "outputs/results",
     "S1_BATCH_SIZE": 16,
     "S1_BN_RECAL_BATCHES": 100,
@@ -192,7 +192,7 @@
     "S1_LOSS": "huber",
     "S1_LR": 0.0001,
     "S1_MAX_EPOCHS": 50,
-    "S1_NUM_WORKERS": 0,
+    "S1_NUM_WORKERS": 2,
     "S1_OPTIMIZER": "adamw",
     "S1_PATIENCE": 30,
     "S1_PATIENCE_WARMUP_EPOCHS": 15,
@@ -256,13 +256,13 @@
     "TRAIN_STRIDE_TRANSITION_S": 1.0,
     "TRANSITION_RAMP_K": 5.0
   },
-  "torch": "2.4.1",
-  "device": "cpu",
+  "torch": "2.14.0",
+  "device": "mps",
   "run": {
     "stage": "7_hypernetwork",
     "fold": "pat01",
     "backbone": "outputs/lopo/checkpoints/pat01/final_model.pth",
-    "best_val_bce": 1.197387471795082,
-    "epochs_run": 2
+    "best_val_bce": 1.017246287730005,
+    "epochs_run": 7
   }
 }
