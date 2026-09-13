@@ -14,7 +14,7 @@ the same per-fold value must be applied to the adapted model in Stage 7.
 | pat07 | 0.870 | 0.367 | 1 | 0 | 0.132 | 0.0 | +74.5 |
 | pat08 | 0.235 | 0.415 | 1 | 25 | 0.558 | 44.8 | +20.0 |
 | pat09 | 0.960 | 0.163 | 1 | 8 | 0.106 | 75.8 | +17.3 |
-| **pooled** | — | — | **18/8** | **129** | **3.146** | **41.0** | — |
+| **pooled** | — | — | **18/18** | **129** | **3.146** | **41.0** | — |
 
 ## Why not a false-alarm rate target
 
@@ -36,7 +36,7 @@ FDR/h incomparable across folds.
 
 ## The honest verdict on the baseline
 
-Sensitivity is 8/8, and it is not worth much: the cohort model alarms **41 times
+Sensitivity is 18/18 seizures, and it is not worth much: the cohort model alarms **41 times
 per hour**, roughly once every 1.5 minutes. pat07 is the sole exception at
 0 false alarms — and pays for it with a 74.5 s detection latency.
 
