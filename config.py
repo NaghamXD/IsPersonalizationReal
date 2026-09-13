@@ -288,6 +288,24 @@ HN_USE_BASE = True               # [METHOD] A_p = A_base + A_hyper(z)
 HN_Z_JITTER_SIGMA = 0.15         # [METHOD] training only
 HN_DELTA_CLIP_RATIO = 0.5        # [METHOD] rho: ||dW||_F <= rho * ||W_base||_F
 
+# [METHOD 3.4.2] AdamW; 300-step linear warmup 1e-5 -> 1e-3, then cosine to 1e-6.
+#   BCEWithLogitsLoss on un-sigmoided logits. Early stop on the pooled validation loss
+#   of the two internal validation patients, patience 5.
+HN_LR_START = 1e-5
+HN_LR_PEAK = 1e-3
+HN_LR_MIN = 1e-6
+HN_WARMUP_STEPS = 300
+HN_PATIENCE = 5
+HN_MAX_EPOCHS = 60
+HN_WEIGHT_DECAY = 0.01
+HN_GRAD_CLIP = 1.0
+# [DECISION D25] The backbone, INCLUDING its BatchNorm buffers, is frozen in eval mode
+#   for the whole of Stage 7 (methodology step 2: "Freeze Base Backbone + Batch
+#   Normalization Buffers"). Patient-homogeneous batches would otherwise compute batch
+#   statistics within a single patient, which is itself a form of adaptation and would
+#   leak into the baseline-versus-adapted comparison.
+HN_FREEZE_BN = True
+
 # [DECISION D24] The draft writes A_base ~ N(0, d_in^-1 * 1e-2). Read as a VARIANCE
 #   scale, std = 0.1/sqrt(d_in), which is exactly 0.100x the standard LoRA init
 #   N(0, 1/d_in). Read as a standard deviation, std = 1e-2/d_in = 0.000241x -- about

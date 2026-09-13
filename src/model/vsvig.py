@@ -400,7 +400,7 @@ class STViG(nn.Module):
             x = x
         return x
 
-    def forward(self, inputs, kpts=None):
+    def forward(self, inputs, kpts=None, return_logits: bool = False):
         # inputs: Batches, Frames, Points, Channles, Height, Width
         x = self.stem(inputs) # -> B, T, P, C
         x = self.pe(self.pos_emb, x, kpts)
@@ -414,7 +414,12 @@ class STViG(nn.Module):
         B,T,C,P,_ = x.shape
         x = x.transpose(1,2).contiguous().view(B,C,T,P)
         x = nn.functional.adaptive_avg_pool2d(x, 1) # B, C, 1, 1
-        return torch.sigmoid(self.fc(x).squeeze(-1).squeeze(-1).squeeze(-1))
+        logits = self.fc(x).squeeze(-1).squeeze(-1).squeeze(-1)
+        # [METHOD 3.4.2] The hypernetwork is trained with BCEWithLogitsLoss "directly
+        # on un-sigmoided logits to eliminate gradient saturation", but every existing
+        # caller (evaluate.py, the Stage 6 trainer, the signature builder) expects a
+        # probability. Default behaviour is unchanged; return_logits opts in.
+        return logits if return_logits else torch.sigmoid(logits)
 
 @register_model
 def VSViG_base(pretrained=False, **kwargs):

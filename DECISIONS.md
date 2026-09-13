@@ -642,6 +642,79 @@ Not yet decided. The options and their costs belong in front of a human before ~
 training is spent on either.
 
 
+## D25. Patient-homogeneous batching and frozen BatchNorm — RESOLVED
+
+**Date:** 2026-09-13, per the methodology's own step 2-3 and the user's instruction.
+
+Stage 7 uses the Max-Pool Dynamic Cyclic Sampler of §3.4.1 (patient-homogeneous
+batches, `S_p = max(|D_inter,p|, |D_ictal,p|) / (BatchSize/2)`, majority drawn
+sequentially without replacement, minority wrapped with `itertools.cycle`, invariant
+50/50 per step), and freezes the backbone **including its BatchNorm buffers** in eval
+mode. Freezing BN is what stops patient-homogeneous batches from computing statistics
+within a single patient, which would be a second, unlabelled channel of adaptation.
+
+Accepted cost, explicitly: the Stage 6 baseline was trained with multi-patient shuffled
+batches and live BN, so it is not a like-for-like control for the adapted arm. A
+baseline retrained under frozen BN may be needed before the final comparison.
+
+[INFERRED] Transition clips carry soft labels in (0,1) and belong to neither pool; the
+50/50 rule is stated over interictal and ictal only, so they are excluded from Stage 7
+training. They are still scored at evaluation.
+
+[DECISION] Batch ORDER is shuffled across patients within an epoch. The draft fixes
+batch contents but not sequence; emitting all of a patient's S_p batches consecutively
+would make the update direction strongly autocorrelated.
+
+## D26. Stage 7 has almost no gradient signal — OPEN, and it is structural
+
+**Date:** 2026-09-13, measured during the first Stage 7 smoke run.
+
+The methodology's sequence is: train the backbone on 5 patients (step 1), freeze it
+(step 2), then train the hypernetwork on **those same 5 patients** (step 3). That
+assumes the frozen backbone leaves useful residual error on its own training patients.
+Measured on fold pat01, it does not:
+
+| patients | baseline BCE (no hypernetwork) |
+|---|---|
+| training patients (backbone was fitted on them) | **0.0066** |
+| internal validation patients (never seen) | **0.738** (pat04 1.153, pat07 0.530) |
+
+A **112x gap**. The loss Stage 7 is asked to minimise is already ~0 on every example it
+is allowed to see. This is the same memorisation D22 measured from the other side —
+within-source AUC 0.997-1.000 on training patients — expressed as a loss.
+
+The consequence is that the hypernetwork is optimised where there is nothing to gain,
+while the quantity that matters — generalisation to an unseen patient — never enters
+the objective. The first smoke run is consistent with that: train BCE fell 0.0069 →
+0.0049 over two epochs while validation BCE **rose** 1.197 → 1.313.
+
+Options, none free:
+
+1. **Run it anyway.** Early stopping is on validation loss with patience 5, so a
+   hypernetwork that only hurts stops within ~6 epochs. Cheap to find out, and a
+   negative result is a finding about the method as published.
+2. **Train the hypernetwork on the internal validation patients** instead — real
+   gradient, but it consumes the only clean unseen patients and leaves nothing for
+   early stopping.
+3. **Weaken the backbone deliberately** (shorter budget, stronger regularisation) so
+   training patients retain non-trivial loss. Fixes the root cause, keeps the design
+   intact, costs a full baseline retrain.
+4. **Cross-fitting** — train several backbones per fold so every hypernetwork training
+   patient is scored by a backbone that did not see it. Correct and expensive.
+
+## D27. The patient a batch belongs to must travel with the batch
+
+A first version of the Stage 7 trainer paired batches with patients via
+`zip(loader, sampler.epoch_patients)`. Python binds that attribute before `__iter__`
+fills it: epoch 1 zipped against an empty list and ran **zero** batches (a training loss
+of exactly 0.00000 was the only symptom), and every later epoch paired batches against
+the **previous** epoch's patient order — injecting the wrong patient's z_behavior
+throughout, silently, in the one place the entire experiment's meaning depends on.
+
+The patient is now carried inside the batch (`WithPatient`), and homogeneity is asserted
+per batch. Any recurrence raises instead of mis-training.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
@@ -666,4 +739,5 @@ training is spent on either.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
   what exposure floor, once real FDR/h numbers exist.
 - ~~A_base initialisation~~ — RESOLVED as D24 (variance reading; 0.100x standard LoRA).
-- **Batch homogeneity for the adapted model (D25)** — blocking for Stage 7 training.
+- ~~Batch homogeneity (D25)~~ — RESOLVED: cyclic sampler + frozen BN.
+- **Stage 7 gradient starvation (D26)** — blocking a meaningful adapted arm.
