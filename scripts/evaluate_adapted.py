@@ -66,10 +66,18 @@ def score(backbone, targets, deltas, manifest, folder, device):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--fold", required=True)
+    ap.add_argument("--fold", default=None)
+    ap.add_argument("--all-folds", action="store_true")
     ap.add_argument("--tag", default=None, help="checkpoint dir suffix, e.g. 'gentle'")
     args = ap.parse_args()
-    fold = args.fold.lower()
+    if not args.fold and not args.all_folds:
+        ap.error("pass --fold patNN or --all-folds")
+    for f in (sorted(config.COHORT) if args.all_folds else [args.fold.lower()]):
+        evaluate_one(f, args)
+    return 0
+
+
+def evaluate_one(fold, args):
 
     th = _trainer()
     device = th.get_device()
@@ -123,7 +131,7 @@ def main():
     if len(shuffled) < len(need):
         print(f"  [partial] {len(shuffled)}/{len(need)} shuffled conditions done; "
               f"re-run to continue")
-        return 0
+        return
     v = np.array([shuffled[q] for q in sorted(shuffled)])
     mu, sd = float(v.mean()), float(v.std(ddof=1))
     z = (own_auc - mu) / sd if sd > 0 else float("nan")
@@ -141,7 +149,6 @@ def main():
                   "verdict": verdict})
     out.write_text(json.dumps(cache, indent=2))
     print(f"  wrote {out}")
-    return 0
 
 
 if __name__ == "__main__":

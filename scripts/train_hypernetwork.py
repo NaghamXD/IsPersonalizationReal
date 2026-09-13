@@ -154,7 +154,10 @@ def run_batches(hn, backbone, targets, norms, loader, sampler, zs, device,
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--fold", type=str, required=True)
+    ap.add_argument("--fold", type=str, default=None)
+    ap.add_argument("--all-folds", action="store_true")
+    ap.add_argument("--skip-done", action="store_true",
+                    help="skip folds whose hypernetwork_best.pth already exists")
     ap.add_argument("--max-epochs", type=int, default=None)
     ap.add_argument("--restart", action="store_true")
     ap.add_argument("--limit-batches", type=int, default=None,
@@ -170,8 +173,26 @@ def main():
                     help="suffix for the checkpoint directory, e.g. 'gentle'")
     args = ap.parse_args()
 
-    fold = args.fold.lower()
+    if not args.fold and not args.all_folds:
+        ap.error("pass --fold patNN or --all-folds")
+    folds = sorted(config.COHORT) if args.all_folds else [args.fold.lower()]
+    t_all = time.time()
+    for i, f in enumerate(folds):
+        if len(folds) > 1:
+            print(f"\n{'='*70}\n[{i+1}/{len(folds)}] fold {f}\n{'='*70}")
+        train_one(f, args)
+    if len(folds) > 1:
+        print(f"\nall {len(folds)} folds in {(time.time()-t_all)/3600:.2f} h")
+    return 0
+
+
+def train_one(fold, args):
     meta = json.loads((Path(config.FOLDS_DIR) / fold / "fold.json").read_text())
+    _tag = f"_{args.tag}" if args.tag else ""
+    if args.skip_done and (Path(config.HYPER_CKPT_ROOT) / f"{fold}{_tag}" /
+                           "hypernetwork_best.pth").exists():
+        print(f"  [skip] {fold}{_tag} already trained")
+        return
     seed = fold_seed(config.GLOBAL_SEED, sorted(config.COHORT).index(fold))
     seed_everything(seed)
     device = get_device()
@@ -276,7 +297,6 @@ def main():
                           "best_val_bce": best, "epochs_run": len(hist["val_loss"]),
                           "specification_deviations": overrides or None})
     print(f"  best val BCE {best:.5f} -> {ck_dir/'hypernetwork_best.pth'}")
-    return 0
 
 
 if __name__ == "__main__":
