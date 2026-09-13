@@ -715,6 +715,56 @@ The patient is now carried inside the batch (`WithPatient`), and homogeneity is 
 per batch. Any recurrence raises instead of mis-training.
 
 
+## D28. The personalisation criterion, pre-registered — and the specification run fails it
+
+**Date:** 2026-09-13, registered before the option-A diagnostic is run.
+
+**The criterion.** A gain over the BASELINE is not evidence of personalisation:
+perturbing a frozen network's weights at all can help. Personalisation is claimed only
+if the held-out AUC obtained with the patient's OWN z stands apart from the distribution
+obtained with every other cohort patient's z:
+
+    z_score = (AUC_own - mean(AUC_shuffled)) / sd(AUC_shuffled) > 2.0,  AUC_own > mean
+
+The control runs over all seven substitutes, not one, because a single substitute is a
+sample of size one. Implemented in `scripts/evaluate_adapted.py`.
+
+**The specification run (fold pat01) fails it, decisively.**
+
+| condition | held-out within-source AUC |
+|---|---|
+| baseline (dW = 0) | 0.6037 |
+| adapted, pat01's own z | **0.6166** (+0.0129 vs baseline) |
+| shuffled-z (pat02) | 0.6175 |
+| shuffled-z (pat03) | 0.6133 |
+| shuffled-z (pat04) | 0.6179 |
+| shuffled-z (pat06) | 0.6159 |
+| shuffled-z (pat07) | 0.6174 |
+| shuffled-z (pat08) | 0.6166 |
+| shuffled-z (pat09) | 0.6168 |
+
+shuffled-z mean **0.6165**, sd **0.0015** over n=7.
+Own z sits **+0.0001** from that mean —
+**z = +0.05** against a threshold of 2.0.
+
+The sd of 0.0015 is the striking part: every wrong patient's signature produces very
+nearly the same effect as the right one. The +0.0129 over baseline is real and is
+entirely attributable to perturbing the weights, not to which patient they were
+perturbed for.
+
+**This is not yet a verdict on the method.** It is one fold, under an optimiser that
+took a near-zero gradient (D26: 0.0066 training BCE against 0.726 on unseen patients)
+and a 1e-3 peak learning rate and produced ‖dW‖ of 1.17 after a single epoch. Option A
+— peak LR 1e-4, delta budget 0.1, patience 10 — tests whether gentler optimisation
+changes the answer. Registered in advance: if the option-A run also returns z < 2.0, the
+project proceeds to option E and reports the negative result across all eight folds,
+with this criterion as the pre-registered test rather than one chosen afterwards.
+
+Specification runs and diagnostic runs are kept apart: any deviation from the
+methodology's optimisation values requires `--tag`, is printed at startup, and is
+recorded in the run manifest under `specification_deviations`.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been

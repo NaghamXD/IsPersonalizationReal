@@ -159,6 +159,15 @@ def main():
     ap.add_argument("--restart", action="store_true")
     ap.add_argument("--limit-batches", type=int, default=None,
                     help="cap batches per pass (smoke test only, not a real run)")
+    # Overrides for the D28 optimisation diagnostic. The defaults in config.py are the
+    # methodology's values and are what an unflagged run uses; anything passed here is
+    # a deliberate deviation and is recorded in the run manifest and the output path so
+    # a diagnostic run can never be mistaken for a spec run.
+    ap.add_argument("--lr-peak", type=float, default=None)
+    ap.add_argument("--delta-clip", type=float, default=None)
+    ap.add_argument("--patience", type=int, default=None)
+    ap.add_argument("--tag", type=str, default=None,
+                    help="suffix for the checkpoint directory, e.g. 'gentle'")
     args = ap.parse_args()
 
     fold = args.fold.lower()
@@ -167,6 +176,21 @@ def main():
     seed_everything(seed)
     device = get_device()
     max_epochs = args.max_epochs or config.HN_MAX_EPOCHS
+
+    overrides = {}
+    for flag, key in (("lr_peak", "HN_LR_PEAK"), ("delta_clip", "HN_DELTA_CLIP_RATIO"),
+                      ("patience", "HN_PATIENCE")):
+        v = getattr(args, flag)
+        if v is not None:
+            overrides[key] = {"spec": getattr(config, key), "used": v}
+            setattr(config, key, v)
+    if overrides:
+        print("[deviation] running with non-specification optimisation:")
+        for k, d in overrides.items():
+            print(f"    {k}: {d['spec']} -> {d['used']}")
+        if not args.tag:
+            raise SystemExit("  pass --tag to keep this run out of the specification "
+                             "checkpoint directory")
 
     backbone, ck = frozen_backbone(fold, device)
     targets = resolve_targets(backbone)
@@ -209,7 +233,7 @@ def main():
                             weight_decay=config.HN_WEIGHT_DECAY)
     total_steps = max_epochs * max(1, len(tr_s))
 
-    ck_dir = Path(config.HYPER_CKPT_ROOT) / fold
+    ck_dir = Path(config.HYPER_CKPT_ROOT) / (f"{fold}_{args.tag}" if args.tag else fold)
     ck_dir.mkdir(parents=True, exist_ok=True)
     hist = {"train_loss": [], "val_loss": [], "lr": [], "epoch_s": [], "delta_norm": []}
     best, trigger, step = float("inf"), 0, 0
@@ -249,7 +273,8 @@ def main():
 
     write_manifest(ck_dir / "run_manifest.json", seed=seed,
                    extra={"stage": "7_hypernetwork", "fold": fold, "backbone": str(ck),
-                          "best_val_bce": best, "epochs_run": len(hist["val_loss"])})
+                          "best_val_bce": best, "epochs_run": len(hist["val_loss"]),
+                          "specification_deviations": overrides or None})
     print(f"  best val BCE {best:.5f} -> {ck_dir/'hypernetwork_best.pth'}")
     return 0
 
