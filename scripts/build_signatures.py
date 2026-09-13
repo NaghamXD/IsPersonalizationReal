@@ -62,10 +62,15 @@ def make_loader(data_folder):
 
 
 def load_backbone(patient, device):
-    ckpt = Path(config.BASELINE_CKPT_ROOT) / patient / "best_model.pth"
-    if not ckpt.exists():
+    # final_model.pth first: under D21 that is the last-5-epoch average and the model
+    # everything else is evaluated on. best_model.pth is written as a copy of it, but
+    # a pre-D21 run could leave a stale per-epoch argmax under that name.
+    root = Path(config.BASELINE_CKPT_ROOT) / patient
+    ckpt = next((c for c in (root / "final_model.pth", root / "best_model.pth")
+                 if c.exists()), None)
+    if ckpt is None:
         raise FileNotFoundError(
-            f"No backbone for fold {patient} at {ckpt}. "
+            f"No backbone for fold {patient} under {root}. "
             f"Run: python scripts/train_backbone.py --fold {patient}")
     model = VSViG_base(kpt_channels=config.KPT_CHANNELS)
     model.load_state_dict(torch.load(ckpt, map_location=device))
