@@ -556,6 +556,50 @@ architecture or the data.
 each fold's clip counts (pat02 1.14 h to pat04 1.71 h). 1.6 GB of checkpoints.
 
 
+## D22. The LOPO baseline exists: held-out mean 0.678, and it is wildly heterogeneous
+
+**Date:** 2026-09-13. All eight folds under D21, 12.4 h.
+
+24 measurements (8 held-out patients + 16 internal-validation patients, the latter
+usable because D21 selects nothing). Full table in
+`outputs/results/baseline/lopo_baseline_matrix.md`.
+
+- held-out patients: mean 0.678, median 0.714, range 0.180-0.967
+- internal-validation patients: mean 0.699, median 0.726
+- the two agree, which is the check that D21's validation patients are genuinely
+  uncontaminated; had selection leaked they would score systematically higher
+
+**D21 is vindicated on the one fold we can compare.** pat01 scored 0.498 / 0.525 / 0.542
+under three selected checkpoints and **0.604** under the averaged model. The earlier
+"held-out is at chance" reading was substantially a selection artifact.
+
+**Validation still does not predict held-out performance**: corr across the eight folds
+is +0.409, weak and on n = 8. D20 stands; validation is a monitor.
+
+**Per-patient difficulty spans 0.180 to 0.918.** pat07 0.918, pat03 0.829, pat02 0.769,
+pat08 0.741, pat04 0.700, pat01 0.562, pat06 0.543, pat09 0.180. This is the
+heterogeneity section 3.5 is a hypothesis about, and it is now measured rather than
+assumed -- with 2 to 5 independent measurements per patient for six of the eight.
+
+**pat09 is confidently wrong, not uninformative — OPEN.** Its model ranks pat09's
+seizure clips systematically *below* its interictal clips (AUC 0.180), and sat inverted
+at 0.4485 +/- 0.0327 on validation for 35 consecutive epochs. It is not a broken run:
+the same weights score 0.9999 on pat02 and 1.0000 on pat03 with ictal mean 0.98 against
+interictal mean 0.016. This is negative transfer.
+
+LOPO cannot separate "pat09 is hard" from "this training set transfers backwards to
+pat09", because only fold pat09 leaves pat09 unseen. Two consequences to settle before
+Stage 7:
+
+1. An anti-correlated baseline gives a hypernetwork enormous and cheap headroom on
+   pat09. Any section 3.5 correlation will be dominated by that single point unless the
+   analysis is robust to it. The Poisson model of D9 must be checked with and without
+   pat09, and the sensitivity reported either way.
+2. pat09 has 71 ictal and 77 interictal test clips and is the only fold whose training
+   set held more interictal than ictal (1081 vs 947). Whether that is causal is not
+   established.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
@@ -571,6 +615,8 @@ each fold's clip counts (pat02 1.14 h to pat04 1.71 h). 1.6 GB of checkpoints.
 - ~~Checkpoint selection (D20)~~ — resolved by D21 (fixed 50-epoch budget, last-5
   weight averaging, no selection). The rule is pre-registered and must be identical
   for the baseline and the adapted model.
+- **pat09's negative transfer (D22)** — whether section 3.5 is reported with and
+  without it, and whether the training-set class balance is causal.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
   what exposure floor, once real FDR/h numbers exist.
 - **A_base initialisation** — the draft's `N(0, d_in⁻¹ × 10⁻²)` is ambiguous between a
