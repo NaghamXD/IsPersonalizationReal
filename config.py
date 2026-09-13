@@ -288,9 +288,14 @@ HN_USE_BASE = True               # [METHOD] A_p = A_base + A_hyper(z)
 HN_Z_JITTER_SIGMA = 0.15         # [METHOD] training only
 HN_DELTA_CLIP_RATIO = 0.5        # [METHOD] rho: ||dW||_F <= rho * ||W_base||_F
 
-# [INFERRED] The draft writes N(0, d_in^-1 * 1e-2) for A_base. Read as a variance
-#   that is 1e-2/d_in; read as a std it is 1e-4/d_in. The base repo implements the
-#   latter. Kept, and flagged: a 100x difference either way.
+# [DECISION D24] The draft writes A_base ~ N(0, d_in^-1 * 1e-2). Read as a VARIANCE
+#   scale, std = 0.1/sqrt(d_in), which is exactly 0.100x the standard LoRA init
+#   N(0, 1/d_in). Read as a standard deviation, std = 1e-2/d_in = 0.000241x -- about
+#   6e-6 for the stage-3 targets, indistinguishable from zero. Since B is zero-init,
+#   that reading would leave A_p = A_base + A_hyper(z) with no base at all, defeating
+#   the decomposition. Resolved as the variance reading. (6fca412 implements the std
+#   reading; by this argument that is a bug.) Used as a VARIANCE by
+#   src.model.hypernetwork.TargetHead: std = sqrt(HN_A_BASE_STD_SCALE / d_in).
 HN_A_BASE_STD_SCALE = 1e-2
 
 # =============================================================================

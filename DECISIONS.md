@@ -600,6 +600,48 @@ Stage 7:
    established.
 
 
+## D24. A_base is initialised with 1e-2 read as a variance scale
+
+**Date:** 2026-09-13, resolving the open item.
+
+The draft writes `A_base ~ N(0, d_in^-1 x 10^-2)` and the two readings differ 100-fold.
+Settled on the numbers rather than on preference:
+
+| target | d_in | std if VARIANCE | std if STD | standard LoRA N(0, 1/d_in) |
+|---|---|---|---|---|
+| stage3_*_conv2 | 1728 | 0.002406 | 5.79e-06 | 0.02406 |
+| fc0 | 384 | 0.005103 | 2.60e-05 | 0.05103 |
+| fc3 | 256 | 0.006250 | 3.91e-05 | 0.06250 |
+
+The variance reading is **exactly 0.100x** the standard LoRA initialisation across every
+target — a round number that reads as deliberate. The std reading is 0.000241x, putting
+A_base at ~6e-6 on the stage-3 layers. Because B is zero-initialised, that would leave
+`A_p = A_base + A_hyper(z)` with no base: the shared, patient-independent direction the
+decomposition exists to provide would be numerically absent at initialisation, and the
+whole base+residual structure would be decorative.
+
+**Decision: the variance reading.** `std = sqrt(HN_A_BASE_STD_SCALE / d_in)`. The
+6fca412 base repo implements the std reading; by this argument that is a bug, not a
+choice. Asserted in `tests/test_hypernetwork.py`.
+
+## D25. A training batch must be homogeneous in z_behavior — OPEN
+
+One forward pass carries one weight matrix, but the hypernetwork emits a different dW
+per patient. A batch mixing patients cannot be adapted correctly without per-sample
+weights (grouped convolution), so `AdaptedForward` refuses a heterogeneous batch loudly
+rather than silently applying the first patient's delta to everyone.
+
+The straightforward fix is patient-homogeneous batching: draw each batch from a single
+training patient. That is standard for amortised hypernetworks, but it changes the
+Stage 6 sampler, and it interacts with BatchNorm — batch statistics would then be
+computed within one patient, which is itself a mild form of adaptation and would
+contaminate the baseline-versus-adapted comparison unless the baseline is retrained
+under the same batching.
+
+Not yet decided. The options and their costs belong in front of a human before ~12 h of
+training is spent on either.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
@@ -623,6 +665,5 @@ Stage 7:
   without it, and whether the training-set class balance is causal.
 - **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
   what exposure floor, once real FDR/h numbers exist.
-- **A_base initialisation** — the draft's `N(0, d_in⁻¹ × 10⁻²)` is ambiguous between a
-  variance and a standard deviation; the code implements the latter. A 100× difference
-  either way. Unresolved.
+- ~~A_base initialisation~~ — RESOLVED as D24 (variance reading; 0.100x standard LoRA).
+- **Batch homogeneity for the adapted model (D25)** — blocking for Stage 7 training.
