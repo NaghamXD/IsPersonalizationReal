@@ -765,6 +765,78 @@ methodology's optimisation values requires `--tag`, is printed at startup, and i
 recorded in the run manifest under `specification_deviations`.
 
 
+## D29. Option A: gentler optimisation gives the same answer, and rules out the mundane cause
+
+**Date:** 2026-09-13. Peak LR 1e-4 (10x lower), delta budget rho 0.1 (5x tighter),
+patience 10. Tagged `gentle`; the specification run is untouched.
+
+| | specification | gentle |
+|---|---|---|
+| best validation BCE | 1.017 | 1.125 |
+| baseline validation BCE (dW = 0) | 0.726 | 0.726 |
+| held-out AUC, baseline | 0.6037 | 0.6037 |
+| held-out AUC, own z | 0.6166 | 0.6554 |
+| held-out AUC, shuffled-z mean (n=7) | 0.6165 | 0.6635 |
+| shuffled-z sd | 0.0015 | 0.0246 |
+| **z-score (D28 rule: > 2.0)** | **+0.05** | **-0.33** |
+
+Both regimes fail the pre-registered criterion. Under the gentler one the patient's own
+signature is **worse** than the average wrong signature.
+
+**A diagnostic the log gives away.** In the gentle run ‖dW‖ was 1.6510 at *every* epoch,
+unchanged to four decimals. The mean per-target Frobenius budget at rho = 0.1 on this
+backbone is 1.951, 1.956, 1.952, 2.229, 0.166 -> mean **1.6510**. Every target saturated
+its budget at epoch 1 and stayed pinned there. The "gentler" run was not gentler in
+delta magnitude at all; it was pinned against a lower ceiling. (The specification run,
+with a mean budget of 8.255, was NOT saturated -- ‖dW‖ oscillated 1.17-1.98.)
+
+**And a finding about z rather than about the optimiser.** In the gentle run the seven
+shuffled-z conditions span 0.634 to 0.701 -- a spread of 0.067, sd 0.0246.
+So different patients' signatures produce substantially different models; z is doing
+something. The patient's own z simply is not the good one. That is evidence about what
+z CONTAINS, and it is independent of gradient starvation.
+
+It fits D23: z identifies its patient at 55.5% against 12.5% chance, but identification
+recall correlates +0.726 with baseline AUC -- z is least recoverable exactly where the
+model most needs help. z carries identity; it does not appear to carry identity that is
+useful for this task.
+
+## D30. Excluded-patient pre-training: viable in one direction only
+
+The six excluded patients (pat05, pat10, pat11, pat12, pat13, pat14) hold 15 seizures in
+16 videos, 26.4 minutes, 2.96 GB. Two ways to use them; the data settles which.
+
+**Backbone pre-training on the excluded patients — VIABLE.** Backbone training needs
+labelled clips, not a Pool A. One backbone would serve all eight folds, since these
+patients are never a test patient. The hypernetwork would then train on the five LOPO
+patients with a genuine gradient, because the backbone never saw them. This fixes D26
+without weakening the baseline the way option B does.
+
+**Hypernetwork training on the excluded patients — NOT VIABLE.** The hypernetwork needs
+a z_behavior for every patient it trains on, and z needs a Pool A of
+20 interictal clips. Pre-onset footage available:
+
+| patient | pre-onset s | interictal clips | Pool A of 20? |
+|---|---|---|---|
+| pat05 | 109 | ~21 | yes |
+| pat11 | 61 | ~12 | no |
+| pat13 | 37 | ~7 | no |
+| pat14 | 32 | ~6 | no |
+| pat12 | 27 | ~5 | no |
+| pat10 | 8 | ~1 | no |
+
+Only pat05 qualifies. These patients are seizure-dense and interictal-poor, which is why
+they were excluded in the first place (D2) -- and that same property makes them unusable
+as hypernetwork training patients while leaving them usable as backbone data.
+
+**Costs and the gate.** Preprocessing 2.96 GB (~12% of the cohort's volume), one
+backbone run rather than eight, then eight hypernetwork runs at ~20 min. Roughly 5-6 h
+in total. The gate before spending the hypernetwork half: evaluate the pre-trained
+backbone's within-source AUC on the cohort. The current baseline averages 0.678 across
+eight held-out patients; if 26 minutes of seizure-dense video from six data-poor
+patients lands far below that, the repair has bought gradient at too high a price, and
+the comparison is then against a handicapped baseline -- the same trap as option B.
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
