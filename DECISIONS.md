@@ -266,7 +266,7 @@ adjoint would then be wrong rather than merely non-deterministic.
 finished. Once eight backbones exist, changing anything inside the model means
 retraining all eight for consistency — this was the cheapest possible moment.
 
-## D16. The decision threshold must be selected per fold, not inherited — OPEN
+## D16. The decision threshold must be selected per fold, not inherited — RESOLVED 2026-09-13
 
 **Raised by the first real evaluation, not yet decided.**
 
@@ -605,7 +605,11 @@ Stage 7:
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
   dry-run only.
 - **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
-- **Decision threshold selection (D16) — now BLOCKING.** Fold 1 showed ranking without
+- ~~Decision threshold selection (D16)~~ — RESOLVED. Per-fold DT by Youden's J on the
+  internal validation patients' accumulated scores; range 0.160-0.960. A rate-target
+  criterion was rejected because exposure (0.101-0.764 h per patient) cannot resolve
+  1 FDR/h. See outputs/results/baseline_dt/README.md. Original entry below.
+- **(superseded) Decision threshold selection —** Fold 1 showed ranking without
   margin (AUC 0.860 at +0.002 separation; 62% of all clips above 0.9). No fixed DT can
   sit sensibly on that distribution, so every FDR/h number is meaningless until DT is
   selected per fold on the internal validation patients, under a stated operating

@@ -1,5 +1,5 @@
 {
-  "written_at": "2026-09-13T16:36:47.181239+00:00",
+  "written_at": "2026-09-13T16:37:38.440171+00:00",
   "git": {
     "commit": "4dea62dbc35313cb908be6f89878b40fa80f7d8d",
     "branch": "main",
@@ -49,7 +49,7 @@
     ],
     "CONTEXT_DIM": 128,
     "DATA_ROOT": "/sessions/rcw-01ruyojxhwzf9v3rnfxmwqpn/mnt/WU-SAHZU-EMU-Video/dataset",
-    "DECISION_THRESHOLD": 0.9450000000000001,
+    "DECISION_THRESHOLD": 0.16,
     "DETECTION_TIME_REF": "clip_end",
     "DETECTION_WINDOW_AFTER_CLINICAL_S": 120.0,
     "DYNAMIC_PARTITION_FILE": "dy_point_order.pt",
@@ -252,7 +252,7 @@
   "run": {
     "model": "baseline",
     "folds": [
-      "pat01"
+      "pat02"
     ],
     "skipped": []
   }

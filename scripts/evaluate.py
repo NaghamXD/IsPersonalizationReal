@@ -136,9 +136,31 @@ def run_inference(model, activation, manifest_path, device, batch_size=32, limit
 
 
 # ---------------------------------------------------------------- per fold
+def load_fold_threshold(patient):
+    """D16: the DT selected on THIS fold's internal validation patients.
+
+    Set on the config module so src.eval.decision and src.eval.metrics -- which read
+    config.DECISION_THRESHOLD at call time -- both see it. The same value is applied to
+    the baseline and to the adapted model; section 3.5 is a paired difference and must
+    not also measure threshold tuning.
+    """
+    f = Path(config.OUTPUTS_DIR) / "thresholds" / f"{patient}.json"
+    if not f.exists():
+        print(f"[warn] no selected threshold for {patient}; falling back to the "
+              f"inherited DT={config.DECISION_THRESHOLD}. Run scripts/select_threshold.py "
+              f"-- an inherited threshold makes FDR/h incomparable across folds.")
+        return config.DECISION_THRESHOLD, None
+    rec = json.loads(f.read_text())
+    config.DECISION_THRESHOLD = rec["dt"]
+    print(f"[D16] DT={rec['dt']:.3f} selected on {rec['val_patients']} "
+          f"(Youden J={rec['youden_j']:.3f})")
+    return rec["dt"], rec
+
+
 def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None,
                   data_folder=None):
     patient = patient.lower()
+    dt_used, dt_rec = load_fold_threshold(patient)
     model, activation, ckpt = build_model(kind, patient, device)
 
     manifest_path = Path(manifest_path) if manifest_path else \
@@ -169,7 +191,7 @@ def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None,
         for ti, si, yi in zip(t, s, y):
             rows.append({"patient": patient, "source": source,
                          "t_start_s": ti, "label": yi, "prob": si})
-    return results, str(ckpt), str(manifest_path), rows
+    return results, str(ckpt), str(manifest_path), rows, dt_used
 
 
 def probability_report(rows):
@@ -254,9 +276,9 @@ def main():
                   f"(excluded: {config.EXCLUDED_PATIENTS})")
             continue
         try:
-            res, ckpt, manifest, rows = evaluate_fold(p, args.model, onsets, device,
-                                                      args.clips, args.limit,
-                                                      args.data_folder)
+            res, ckpt, manifest, rows, dt_used = evaluate_fold(
+                p, args.model, onsets, device, args.clips, args.limit,
+                args.data_folder)
         except (FileNotFoundError, NotImplementedError) as e:
             print(f"[skip] {p}: {e}")
             skipped.append({"patient": p, "reason": str(e)})
@@ -264,7 +286,7 @@ def main():
         agg = aggregate(res)
         probs = probability_report(rows)
         per_fold[p] = {**agg, "checkpoint": ckpt, "manifest": manifest,
-                       "probabilities": probs}
+                       "decision_threshold": dt_used, "probabilities": probs}
         all_results.extend(res)
         all_rows.extend(rows)
         print(f"[{p}] sens={agg['sensitivity']} "

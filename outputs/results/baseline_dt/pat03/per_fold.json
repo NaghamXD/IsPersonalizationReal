@@ -1,0 +1,65 @@
+{
+  "pat03": {
+    "n_seizures": 2,
+    "n_detected": 2,
+    "sensitivity": 1.0,
+    "n_false_alarms": 9,
+    "exposure_hours": 0.18611111111111112,
+    "fdr_per_hour": 48.35820895522388,
+    "mean_l_eo_s": 1.5,
+    "median_l_eo_s": 1.5,
+    "mean_l_co_s": -4.0,
+    "median_l_co_s": -4.0,
+    "checkpoint": "outputs/lopo/checkpoints/pat03/final_model.pth",
+    "manifest": "processed_data/test_sliding/manifest_pat03.json",
+    "decision_threshold": 0.26,
+    "probabilities": {
+      "interictal": {
+        "n": 135,
+        "mean": 0.20696417102371925,
+        "p10": 0.0013502696761861445,
+        "p50": 0.03662048280239105,
+        "p90": 0.8301719784736636,
+        "frac_above_DT": 0.2518518518518518
+      },
+      "transition": {
+        "n": 1,
+        "mean": 0.8914704918861389,
+        "p10": 0.8914704918861389,
+        "p50": 0.8914704918861389,
+        "p90": 0.8914704918861389,
+        "frac_above_DT": 1.0
+      },
+      "ictal": {
+        "n": 27,
+        "mean": 0.8541209984708715,
+        "p10": 0.5439166188240051,
+        "p50": 0.9655132293701172,
+        "p90": 0.9997354626655579,
+        "frac_above_DT": 1.0
+      },
+      "auc_within_source": 0.8536585365853658,
+      "auc_within_source_pairweighted": 0.8536585365853658,
+      "auc_within_source_macro": 0.8928571428571428,
+      "auc_pooled": 0.934156378600823,
+      "auc_per_source": {
+        "pat03_Sz1": {
+          "auc": 1.0,
+          "n_pos": 13,
+          "n_neg": 1
+        },
+        "pat03_Sz2": {
+          "auc": 0.7857142857142857,
+          "n_pos": 14,
+          "n_neg": 2
+        },
+        "pat03_free": {
+          "auc": NaN,
+          "n_pos": 0,
+          "n_neg": 132
+        }
+      },
+      "n_sources_used": 2
+    }
+  }
+}

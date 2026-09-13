@@ -1,0 +1,12 @@
+{
+  "n_seizures": 2,
+  "n_detected": 2,
+  "sensitivity": 1.0,
+  "n_false_alarms": 31,
+  "exposure_hours": 0.6333333333333333,
+  "fdr_per_hour": 48.94736842105264,
+  "mean_l_eo_s": 20.0,
+  "median_l_eo_s": 20.0,
+  "mean_l_co_s": -20.5,
+  "median_l_co_s": -20.5
+}
