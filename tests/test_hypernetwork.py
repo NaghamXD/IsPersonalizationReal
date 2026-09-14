@@ -205,3 +205,30 @@ def test_leak_check_catches_a_training_only_patient_in_validation():
     worse = Fold(test_patient="patZ", val_patients=("pat04",),
                  train_patients=("pat02",), training_only=("patZ",))
     assert any("training-only" in r[1] for r in verify_no_leak([worse]))
+
+
+def test_adapted_model_wraps_the_backbone_without_mutating_it():
+    """D35: the clinical harness takes a plain model. AdaptedModel must apply its
+    deltas during forward and leave the frozen backbone byte-identical afterwards."""
+    import torch
+    from src.model.adapt import AdaptedModel, resolve_targets
+    from src.model.vsvig import VSViG_base
+
+    m = VSViG_base(kpt_channels=config.KPT_CHANNELS).eval()
+    t = resolve_targets(m)
+    before = {k: v.weight.detach().clone() for k, v in t.items()}
+    deltas = {k: torch.randn_like(v.weight) * 0.02 for k, v in t.items()}
+    am = AdaptedModel(m, t, deltas, z_source="patX").eval()
+
+    d = torch.randn(2, 30, 15, 3, 32, 32)
+    kp = torch.randn(2, 30, 15, config.KPT_CHANNELS)
+    with torch.no_grad():
+        adapted = am(d, kp)
+        plain_after = m(d, kp)
+    for k, v in t.items():
+        assert torch.equal(v.weight, before[k]), f"{k} left modified"
+    assert not torch.allclose(adapted, plain_after), "deltas had no effect"
+    assert am.z_source == "patX"
+    with torch.no_grad():
+        assert torch.allclose(torch.sigmoid(am(d, kp, return_logits=True)), adapted,
+                              atol=1e-6)

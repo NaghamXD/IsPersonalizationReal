@@ -87,7 +87,7 @@ def resolve_checkpoint(root: Path, patient: str) -> Path:
         f"No checkpoint for {patient} under {root}.\nTried:\n  " + "\n  ".join(tried))
 
 
-def build_model(kind: str, patient: str, device):
+def build_model(kind: str, patient: str, device, tag=None, shuffled_z=None):
     if kind == "baseline":
         ckpt = resolve_checkpoint(config.BASELINE_CKPT_ROOT, patient)
         model = VSViG_base(kpt_channels=config.KPT_CHANNELS)
@@ -100,11 +100,57 @@ def build_model(kind: str, patient: str, device):
         return model, (lambda logits: logits), ckpt
 
     if kind == "adapted":
-        raise NotImplementedError(
-            "The adapted model arrives in Stage 7 (hypernetwork.py / adapted_vsvig.py "
-            "are not part of the 6fca412 baseline). This harness is already shaped to "
-            "accept it: build it here, return sigmoid as the activation, and pass "
-            "z_behavior through run_inference.")
+        # D35: the adapted arm needs the SAME clinical pipeline as the baseline --
+        # accumulation, refractory, FDR/h -- because section 3.5's benefit is defined as
+        # a reduction in false detections per hour, not as an AUC difference.
+        import numpy as _np
+        from src.model.adapt import AdaptedModel, base_norms, resolve_targets
+        from src.model.hypernetwork import Hypernetwork
+
+        root = Path(config.BASELINE_CKPT_ROOT) / patient
+        bck = next((c for c in (root / "final_model.pth", root / "best_model.pth")
+                    if c.exists()), None)
+        if bck is None:
+            raise FileNotFoundError(f"no backbone for {patient} under {root}")
+        backbone = VSViG_base(kpt_channels=config.KPT_CHANNELS)
+        st = torch.load(bck, map_location=device, weights_only=False)
+        backbone.load_state_dict(st.get("model_state_dict", st)
+                                 if isinstance(st, dict) else st)
+        backbone.to(device).eval()
+        for prm in backbone.parameters():
+            prm.requires_grad_(False)
+
+        hn_dir = Path(config.HYPER_CKPT_ROOT) / (
+            f"{patient}_{tag}" if tag else patient)
+        hck = hn_dir / "hypernetwork_best.pth"
+        if not hck.exists():
+            raise FileNotFoundError(
+                f"no hypernetwork for {patient} at {hck}. "
+                f"Run scripts/train_hypernetwork.py --fold {patient} first.")
+        hn = Hypernetwork().to(device)
+        hn.load_state_dict(torch.load(hck, map_location=device, weights_only=False))
+        hn.eval()
+
+        zf = Path(config.SIGNATURES_DIR) / patient / "z_behavior.npz"
+        if not zf.exists():
+            raise FileNotFoundError(f"no signatures at {zf}")
+        zs = _np.load(zf)
+        z_from = shuffled_z or patient
+        if z_from not in zs.files:
+            raise KeyError(f"{z_from} has no signature in {zf}")
+        if shuffled_z and shuffled_z == patient:
+            raise ValueError("--shuffled-z must name a DIFFERENT patient; using the "
+                             "held-out patient's own z is the adapted condition")
+
+        targets = resolve_targets(backbone)
+        with torch.no_grad():
+            deltas = hn(torch.tensor(zs[z_from], dtype=torch.float32, device=device),
+                        base_norms=base_norms(targets))
+        model = AdaptedModel(backbone, targets, deltas, z_source=z_from).to(device).eval()
+        label = "adapted" if not shuffled_z else f"shuffled-z({z_from})"
+        print(f"[model] {label}: backbone {bck}, hypernetwork {hck}, z from {z_from}")
+        return model, (lambda logits: logits), f"{bck} + {hck} [z={z_from}]"
+
     raise ValueError(f"unknown --model {kind!r}")
 
 
@@ -158,10 +204,10 @@ def load_fold_threshold(patient):
 
 
 def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None,
-                  data_folder=None):
+                  data_folder=None, tag=None, shuffled_z=None):
     patient = patient.lower()
     dt_used, dt_rec = load_fold_threshold(patient)
-    model, activation, ckpt = build_model(kind, patient, device)
+    model, activation, ckpt = build_model(kind, patient, device, tag, shuffled_z)
 
     manifest_path = Path(manifest_path) if manifest_path else \
         Path(config.FOLDS_DIR) / f"val_{patient}.json"
@@ -253,6 +299,12 @@ def main():
                          "config.PROCESSED_DIR.")
     ap.add_argument("--limit", type=int, default=None, help="smoke-test clip cap")
     ap.add_argument("--out", type=str, default=None)
+    ap.add_argument("--tag", type=str, default=None,
+                    help="hypernetwork checkpoint dir suffix, e.g. 'gentle'")
+    ap.add_argument("--shuffled-z", type=str, default=None, metavar="patNN",
+                    help="D28 control: adapt using ANOTHER patient's signature, so the "
+                         "clinical gain from adapting at all can be separated from the "
+                         "gain attributable to this patient's signature")
     args = ap.parse_args()
 
     if not args.fold and not args.all_folds:
@@ -278,8 +330,9 @@ def main():
         try:
             res, ckpt, manifest, rows, dt_used = evaluate_fold(
                 p, args.model, onsets, device, args.clips, args.limit,
-                args.data_folder)
-        except (FileNotFoundError, NotImplementedError) as e:
+                args.data_folder, tag=args.tag,
+                shuffled_z=(args.shuffled_z or "").lower() or None)
+        except (FileNotFoundError, NotImplementedError, KeyError, ValueError) as e:
             print(f"[skip] {p}: {e}")
             skipped.append({"patient": p, "reason": str(e)})
             continue

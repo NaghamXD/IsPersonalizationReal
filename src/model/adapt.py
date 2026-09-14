@@ -109,3 +109,26 @@ class AdaptedForward:
             mod._parameters["weight"] = saved
         self._saved.clear()
         return False
+
+
+class AdaptedModel(nn.Module):
+    """Frozen backbone + fixed LoRA deltas, presented as an ordinary model.
+
+    The clinical harness (scripts/evaluate.py) takes a model and calls it; it should not
+    have to know that some models carry weight deltas. Deltas are computed ONCE, from one
+    patient's z_behavior, and held fixed for the whole evaluation -- that is what
+    zero-shot patient conditioning means here, and it is why this can be a plain module
+    rather than something that re-derives weights per batch.
+    """
+
+    def __init__(self, backbone: nn.Module, targets: dict, deltas: dict,
+                 z_source: str = ""):
+        super().__init__()
+        self.backbone = backbone
+        self._targets = targets          # plain attrs: not submodules to register twice
+        self._deltas = {k: v.detach() for k, v in deltas.items()}
+        self.z_source = z_source         # which patient's signature produced these
+
+    def forward(self, data, kpts=None, return_logits: bool = False):
+        with AdaptedForward(self._targets, self._deltas):
+            return self.backbone(data, kpts, return_logits=return_logits)
