@@ -837,6 +837,45 @@ eight held-out patients; if 26 minutes of seizure-dense video from six data-poor
 patients lands far below that, the repair has bought gradient at too high a price, and
 the comparison is then against a handicapped baseline -- the same trap as option B.
 
+## D31. Phase 2's universal backbone is not viable — the gate fired at the dry run
+
+**Date:** 2026-09-14. Cost of finding out: a nine-minute dry run.
+
+The plan was one universal backbone trained on the six excluded patients, frozen, with
+the hypernetwork then trained on the five LOPO patients it had never seen — restoring
+the gradient D26 showed was missing, without weakening the baseline the way option B
+would.
+
+`preprocess.py --patients pat05,pat10,pat11,pat12,pat13,pat14 --dry-run`:
+
+| | interictal | transition | ictal | total |
+|---|---|---|---|---|
+| 8-patient cohort (labels.json) | 1714 (45%) | 275 (7%) | 1809 (48%) | 3798 |
+| six excluded patients | **29 (2%)** | 166 (14%) | 1028 (84%) | 1223 |
+
+**29 negative examples in total, against 1028 positives — 35:1, across six patients.**
+A seizure detector trained on that cannot learn what "not a seizure" looks like. Stage 6
+targets 45% interictal per batch; reaching it would mean cycling those 29 clips about 18
+times per epoch, so the backbone would see the same handful of non-seizure moments over
+and over and would, in effect, learn to answer "seizure".
+
+The cause is the same property that got these patients excluded in D2 and that blocked
+them as hypernetwork training patients in D30: their recordings are short and centred on
+the seizure. It blocks the third use as well. **There is no variant that rescues it** —
+mixing in cohort patients to supply interictal video reintroduces exactly the
+memorisation that Phase 2 exists to avoid, and fixing two cohort patients as permanent
+"interictal donors" would remove them from the evaluation set, leaving six.
+
+**What survives.** The six patients remain usable as *additional training data* for the
+existing per-fold backbones — the all-data variant. There the cohort patients supply
+interictal video and the excluded patients add ictal diversity: +1223 clips on a ~2500
+clip fold (+49%), and seizures per fold rising from about 13 to about 28. That does not
+address D26 or the amortisation count, so it is a baseline-improvement experiment, not a
+repair of the hypernetwork. It also directly tests the cohort-size explanation for the
+Phase 1 negative: if 8 -> 14 training patients moves LOPO generalisation substantially,
+the bottleneck is cohort size; if it does not, the bottleneck is elsewhere.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been

@@ -158,14 +158,24 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--patient", type=str, default=None)
     ap.add_argument("--all", action="store_true", help="every patient in the cohort")
+    ap.add_argument("--patients", type=str, default=None,
+                    help="comma-separated list, e.g. the excluded patients for the "
+                         "Phase 2 universal backbone. Patients outside config.COHORT "
+                         "are allowed here but warned about, because they are usable as "
+                         "backbone training data while being unusable for evaluation.")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
-    if not args.patient and not args.all:
-        ap.error("pass --patient patNN or --all")
+    if not (args.patient or args.all or args.patients):
+        ap.error("pass --patient patNN, --patients a,b,c or --all")
 
     seed_everything(config.GLOBAL_SEED)
-    patients = config.COHORT if args.all else [args.patient.lower()]
+    if args.all:
+        patients = list(config.COHORT)
+    elif args.patients:
+        patients = [x.strip().lower() for x in args.patients.split(",") if x.strip()]
+    else:
+        patients = [args.patient.lower()]
     for p in patients:
         if p not in config.COHORT:
             print(f"[warn] {p} is not in the cohort (excluded: {config.EXCLUDED_PATIENTS})")
