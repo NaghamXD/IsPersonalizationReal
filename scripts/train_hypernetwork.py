@@ -93,7 +93,7 @@ def group_by_patient(ds):
 
 
 def load_z(fold, device):
-    f = Path(config.OUTPUTS_DIR) / "signatures" / fold / "z_behavior.npz"
+    f = Path(config.SIGNATURES_DIR) / fold / "z_behavior.npz"
     if not f.exists():
         raise FileNotFoundError(
             f"no signatures for {fold} at {f}. Run scripts/build_signatures.py first.")

@@ -43,20 +43,37 @@ def _resolve_data_root() -> Path:
 DATA_ROOT = _resolve_data_root()
 LABEL_XLSX = DATA_ROOT / "Label.xlsx"
 
+# [DECISION D32] Run scoping. Every artifact that a re-run would OVERWRITE carries a
+#   run suffix taken from $VSVIG_RUN; the empty default is Phase 1. Clip files
+#   (patches/, kpts/) are deliberately NOT scoped -- they are content-addressed by clip
+#   name and adding patients only adds files, never rewrites one. What a second
+#   experiment would otherwise destroy is labels.json, the fold definitions, the pools
+#   and the checkpoint roots, so those move together under a run name.
+#
+#       VSVIG_RUN=alldata python scripts/preprocess.py --all
+#
+#   Phase 1's artifacts are inventoried with checksums in outputs/PHASE1_ARTIFACTS.json;
+#   `python scripts/freeze_artifacts.py --verify` re-checks all 268 of them.
+RUN_NAME = os.environ.get("VSVIG_RUN", "").strip()
+_SUF = f"_{RUN_NAME}" if RUN_NAME else ""
+
 PROCESSED_DIR = Path("processed_data")
-PATCHES_DIR = PROCESSED_DIR / "patches"
-KPTS_DIR = PROCESSED_DIR / "kpts"
-LABELS_JSON = PROCESSED_DIR / "labels.json"
-FOLDS_DIR = PROCESSED_DIR / "folds"
-POOLS_DIR = PROCESSED_DIR / "pools"
+PATCHES_DIR = PROCESSED_DIR / "patches"          # shared: adding patients adds files
+KPTS_DIR = PROCESSED_DIR / "kpts"                # shared, same reason
+LABELS_JSON = PROCESSED_DIR / f"labels{_SUF}.json"
+FOLDS_DIR = PROCESSED_DIR / f"folds{_SUF}"
+POOLS_DIR = PROCESSED_DIR / f"pools{_SUF}"
 
 # Test-time clips live apart from training clips on purpose: they are extracted
 # with a different stride and must never be mixed into a training manifest.
 TEST_CLIPS_DIR = PROCESSED_DIR / "test_sliding"
 
 OUTPUTS_DIR = Path("outputs")
-BASELINE_CKPT_ROOT = OUTPUTS_DIR / "lopo" / "checkpoints"
-HYPER_CKPT_ROOT = OUTPUTS_DIR / "lopo_hypernetwork" / "checkpoints"
+BASELINE_CKPT_ROOT = OUTPUTS_DIR / f"lopo{_SUF}" / "checkpoints"
+HYPER_CKPT_ROOT = OUTPUTS_DIR / f"lopo_hypernetwork{_SUF}" / "checkpoints"
+SIGNATURES_DIR = OUTPUTS_DIR / f"signatures{_SUF}"
+RESULTS_DIR = OUTPUTS_DIR / f"results{_SUF}"
+THRESHOLDS_DIR = OUTPUTS_DIR / f"thresholds{_SUF}"
 RESULTS_DIR = OUTPUTS_DIR / "results"
 
 POSE_WEIGHTS = Path("pose.pth")

@@ -97,7 +97,7 @@ def main():
                       for b in temporal_blocks(pools[p]["pool_a"],
                                                config.STABILITY_N_BLOCKS)]
                   for p in config.COHORT}
-        np.savez(Path(config.OUTPUTS_DIR) / "signatures" / fold / "z_blocks.npz",
+        np.savez(Path(config.SIGNATURES_DIR) / fold / "z_blocks.npz",
                  **{p: np.stack(v) for p, v in blocks.items()})
         r = identify(blocks, n_perm=args.n_perm)
         out[fold] = r
@@ -105,7 +105,7 @@ def main():
               f"(chance {r['chance']:.1%}, null mean {r['null_mean']:.1%}, "
               f"95th pct {r['null_p95']:.1%})  p = {r['p_value']:.4f}")
 
-    dest = Path(config.OUTPUTS_DIR) / "signatures" / "identity_probe.json"
+    dest = Path(config.SIGNATURES_DIR) / "identity_probe.json"
     prev = json.loads(dest.read_text()) if dest.exists() else {}
     prev.update(out); dest.write_text(json.dumps(prev, indent=2))
     print(f"\nwrote {dest}")

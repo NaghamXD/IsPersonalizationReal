@@ -54,7 +54,7 @@ def main():
     ap.add_argument("--tag", default=None)
     args = ap.parse_args()
     suf = f"_{args.tag}" if args.tag else ""
-    root = Path(config.OUTPUTS_DIR) / "results" / "adapted"
+    root = Path(config.RESULTS_DIR) / "adapted"
 
     rows = []
     for f in sorted(config.COHORT):
@@ -66,7 +66,7 @@ def main():
         if "z_score" not in d:
             print(f"  [incomplete] {f}: shuffled-z control unfinished")
             continue
-        z = np.load(Path(config.OUTPUTS_DIR) / "signatures" / f / "z_behavior.npz")
+        z = np.load(Path(config.SIGNATURES_DIR) / f / "z_behavior.npz")
         meta = json.loads((Path(config.FOLDS_DIR) / f / "fold.json").read_text())
         c = np.stack([z[q] for q in meta["train_patients"]]).mean(0)   # §3.5 centroid
         rows.append({**d, "atypicality": float(np.linalg.norm(z[f] - c))})

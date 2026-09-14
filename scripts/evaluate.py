@@ -144,7 +144,7 @@ def load_fold_threshold(patient):
     the baseline and to the adapted model; section 3.5 is a paired difference and must
     not also measure threshold tuning.
     """
-    f = Path(config.OUTPUTS_DIR) / "thresholds" / f"{patient}.json"
+    f = Path(config.THRESHOLDS_DIR) / f"{patient}.json"
     if not f.exists():
         print(f"[warn] no selected threshold for {patient}; falling back to the "
               f"inherited DT={config.DECISION_THRESHOLD}. Run scripts/select_threshold.py "

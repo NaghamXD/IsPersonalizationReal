@@ -91,7 +91,7 @@ def evaluate_one(fold, args):
                                   map_location=device, weights_only=False))
     hn.eval()
 
-    out = Path(config.OUTPUTS_DIR) / "results" / "adapted" / (
+    out = Path(config.RESULTS_DIR) / "adapted" / (
         f"{fold}{'_' + args.tag if args.tag else ''}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     cache = json.loads(out.read_text()) if out.exists() else {}

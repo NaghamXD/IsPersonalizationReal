@@ -113,7 +113,7 @@ def main():
     pools = {p: json.loads((Path(config.POOLS_DIR) / f"{p}.json").read_text())
              for p in config.COHORT}
     folds = sorted(config.COHORT) if args.all_folds else [args.fold.lower()]
-    out_root = Path(config.OUTPUTS_DIR) / "signatures"
+    out_root = Path(config.SIGNATURES_DIR)
     out_root.mkdir(parents=True, exist_ok=True)
 
     for fold in folds:

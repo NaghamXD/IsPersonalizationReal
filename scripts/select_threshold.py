@@ -107,7 +107,7 @@ def main():
     device = torch.device("mps" if torch.backends.mps.is_available()
                           else "cuda" if torch.cuda.is_available() else "cpu")
     grid = np.linspace(0.005, 0.995, args.grid)
-    out_root = Path(config.OUTPUTS_DIR) / "thresholds"
+    out_root = Path(config.THRESHOLDS_DIR)
     out_root.mkdir(parents=True, exist_ok=True)
 
     for fold in (sorted(config.COHORT) if args.all_folds else [args.fold.lower()]):

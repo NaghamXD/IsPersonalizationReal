@@ -60,7 +60,7 @@ def main():
     pools = {p: json.loads((Path(config.POOLS_DIR) / f"{p}.json").read_text())
              for p in config.COHORT}
 
-    dest = Path(config.OUTPUTS_DIR) / "signatures" / "projection_dim_probe.json"
+    dest = Path(config.SIGNATURES_DIR) / "projection_dim_probe.json"
     out = json.loads(dest.read_text()) if dest.exists() else {}
 
     for fold in (sorted(config.COHORT) if args.all_folds else [args.fold.lower()]):

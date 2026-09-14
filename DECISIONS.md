@@ -876,6 +876,43 @@ Phase 1 negative: if 8 -> 14 training patients moves LOPO generalisation substan
 the bottleneck is cohort size; if it does not, the bottleneck is elsewhere.
 
 
+## D32. Run scoping: a second experiment cannot overwrite the first
+
+**Date:** 2026-09-14, before starting the all-data run.
+
+Phase 1's artifacts are inventoried with checksums — 268 files, 2.50 GB — in
+`outputs/PHASE1_ARTIFACTS.json`, with each weight file's ROLE recorded beside its md5 in
+`outputs/PHASE1_ARTIFACTS.md`. `python scripts/freeze_artifacts.py --verify` re-checks
+every one. Checksums alone would not have been enough: a weight file is only useful if
+you also know which run produced it and what part it played.
+
+Copying the 2.50 GB aside was rejected — see the disk note below. Instead the paths that
+a second experiment would overwrite now carry a run suffix from `$VSVIG_RUN`:
+
+| | Phase 1 (default) | `VSVIG_RUN=alldata` |
+|---|---|---|
+| labels | `processed_data/labels.json` | `labels_alldata.json` |
+| folds | `processed_data/folds` | `folds_alldata` |
+| pools | `processed_data/pools` | `pools_alldata` |
+| backbones | `outputs/lopo/checkpoints` | `outputs/lopo_alldata/checkpoints` |
+| hypernetworks | `outputs/lopo_hypernetwork/...` | `outputs/lopo_hypernetwork_alldata/...` |
+| signatures, results, thresholds | `outputs/signatures`, … | `…_alldata` |
+
+`patches/` and `kpts/` are deliberately NOT scoped: clips are content-addressed by name,
+so adding six patients adds files and rewrites none. That also avoids duplicating 34 GB.
+
+The risk this closes is not the checkpoints — those were the obvious one. It is
+`labels.json` and `folds/`: regenerating them for a 14-patient cohort would silently
+replace the fold definitions every Phase 1 number was computed against, and nothing
+downstream would notice.
+
+**Disk, which is now the binding constraint.** 10.70 GB free. The all-data run needs
+1223 new clips at 5.54 MB each (6.77 GB) plus eight new fold checkpoint sets (1.52 GB) =
+**8.29 GB**, leaving 2.41 GB. Setting `S1_CHECKPOINT_EVERY = 0` for that run drops the
+periodic weights and recovers 0.86 GB. Running out mid-preprocessing would be recoverable
+(extraction is idempotent and resumes) but running out mid-training would not be.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
