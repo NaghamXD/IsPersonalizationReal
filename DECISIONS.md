@@ -446,7 +446,7 @@ Pairs still weight recordings within a patient. Patients are then averaged equal
 `within_source_auc` returns `patient_balanced` (selects and reports), with
 `pair_weighted`, `macro` and `pooled` retained for comparison.
 
-## D20. Checkpoint selection on internal validation does not transfer — OPEN
+## D20. Checkpoint selection on internal validation does not transfer — RESOLVED by D21
 
 **Date:** 2026-09-12, after the fold-1 retrain under D19.
 
@@ -624,7 +624,7 @@ whole base+residual structure would be decorative.
 6fca412 base repo implements the std reading; by this argument that is a bug, not a
 choice. Asserted in `tests/test_hypernetwork.py`.
 
-## D25. A training batch must be homogeneous in z_behavior — OPEN
+## D25. A training batch must be homogeneous in z_behavior — RESOLVED 2026-09-13
 
 One forward pass carries one weight matrix, but the hypernetwork emits a different dW
 per patient. A batch mixing patients cannot be adapted correctly without per-sample
@@ -989,27 +989,48 @@ bottleneck lies elsewhere and the negative result rests on firmer ground.
 
 ## Open
 
-- **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been
-  dry-run only.
-- **Old `processed_data/` and `outputs/` are not trusted** and are being rebuilt (Q7).
-- ~~Decision threshold selection (D16)~~ — RESOLVED. Per-fold DT by Youden's J on the
-  internal validation patients' accumulated scores; range 0.160-0.960. A rate-target
-  criterion was rejected because exposure (0.101-0.764 h per patient) cannot resolve
-  1 FDR/h. See outputs/results/baseline_dt/README.md. Original entry below.
-- **(superseded) Decision threshold selection —** Fold 1 showed ranking without
-  margin (AUC 0.860 at +0.002 separation; 62% of all clips above 0.9). No fixed DT can
-  sit sensibly on that distribution, so every FDR/h number is meaningless until DT is
-  selected per fold on the internal validation patients, under a stated operating
-  criterion, held identical between baseline and adapted.
-- **Pool A time span heterogeneity (D14)** — whether the §3.2.3 stability gate is
-  applied per patient or pooled. Blocking for Stage 5's gate.
-- ~~Checkpoint selection (D20)~~ — resolved by D21 (fixed 50-epoch budget, last-5
-  weight averaging, no selection). The rule is pre-registered and must be identical
-  for the baseline and the adapted model.
-- **pat09's negative transfer (D22)** — whether section 3.5 is reported with and
-  without it, and whether the training-set class balance is causal.
-- **§3.5 at n = 8** — whether to report an additional sensitivity analysis, and against
-  what exposure floor, once real FDR/h numbers exist.
-- ~~A_base initialisation~~ — RESOLVED as D24 (variance reading; 0.100x standard LoRA).
-- ~~Batch homogeneity (D25)~~ — RESOLVED: cyclic sampler + frozen BN.
-- **Stage 7 gradient starvation (D26)** — blocking a meaningful adapted arm.
+Updated 2026-09-14, after Phase 1 concluded and the all-data run began. Everything above
+D16 that was once listed here is resolved; the entries below are what actually remains.
+
+### Decisions owed before the all-data numbers are seen
+
+Both must be fixed in advance, or they become post-hoc choices made with knowledge of
+the result.
+
+- **pat09 in or out of §3.5.** Its model is anti-correlated on its own held-out patient
+  (within-source AUC 0.180, D22) and it is the single most influential point in any
+  correlation at n = 8. Report §3.5 with and without it, and say so before looking.
+- **pat03 and pat04's metric.** Their within-recording AUC rests on 41 and 14 ordered
+  pairs, so it moves in steps of 0.024 and 0.071 against effects of ~0.0005. Either
+  report event-level sensitivity and FDR/h for them in place of AUC, or exclude them
+  from AUC analyses under a rule stated in advance. They currently sit inside D22's
+  0.678 baseline mean without qualification.
+
+### Work remaining after the all-data run finishes
+
+- Score the eight new backbones on the same held-out test clips; place the new baseline
+  beside D22's 0.678. Same patients, same metric, same protocol.
+- Re-select per-fold decision thresholds (D16's procedure) for the new backbones, if
+  FDR/h is to be reported for them.
+- **Repeat Stage 7 on the new backbones.** Signatures must be rebuilt first, since
+  z_behavior is a function of the frozen backbone. Roughly 15 min for signatures, 1.3 h
+  for eight hypernetwork runs, 30 min for the shuffled-z evaluation. Cheap, and it
+  converts "the method failed on an 8-patient training set" into "it failed on 8 and on
+  14", which is a materially stronger claim.
+- Figures. None exist yet.
+
+### Known limitations, currently stated rather than fixed
+
+- **The comparison is not quite like-for-like (D25).** The adapted arm uses
+  patient-homogeneous batches with frozen BatchNorm; the Phase 1 baseline used shuffled
+  batches and live BatchNorm. Retraining the baseline under the adapted arm's batching
+  would close it, at roughly 12 h. Listed as a threat to validity in the Phase 1 report.
+- **Stage 7 gradient starvation (D26)** is the diagnosis, not a defect to repair: the
+  frozen backbone's loss on its own training patients is 0.0066 against 0.726 on unseen
+  ones. D31 established this corpus cannot supply a backbone that avoids it.
+- **Interictal repetition in the all-data run.** Ictal clips roughly double while
+  interictal barely moves, so each interictal clip is now seen ~1.6 times per epoch
+  against ~1.1 in Phase 1. A gain could come from more seizure variety or from more
+  passes over the same non-seizure footage; the two are not separated.
+- **§3.5 at n = 8** remains underpowered whatever is done. The sign tests are exact and
+  weak; the correlations are indicative only.
