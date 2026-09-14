@@ -40,9 +40,10 @@ def load_clips_by_patient():
     labels = json.loads(Path(config.LABELS_JSON).read_text())
     by_patient = defaultdict(list)
     skipped = defaultdict(int)
+    keep = set(config.COHORT) | set(config.TRAINING_ONLY_PATIENTS)
     for name, label in labels.items():
         p = patient_of(name)
-        if p not in config.COHORT:
+        if p not in keep:
             skipped[p] += 1
             continue
         by_patient[p].append([name, float(label)])
@@ -70,6 +71,15 @@ def main():
     if missing:
         print(f"  ERROR: cohort patients with no clips: {missing}")
         return 1
+    if config.TRAINING_ONLY_PATIENTS:
+        gone = [p for p in config.TRAINING_ONLY_PATIENTS if p not in by_patient]
+        if gone:
+            print(f"  ERROR: training-only patients with no clips: {gone}. "
+                  f"Run preprocess.py for them first.")
+            return 1
+        n = sum(len(by_patient[p]) for p in config.TRAINING_ONLY_PATIENTS)
+        print(f"  [D34] training-only patients {config.TRAINING_ONLY_PATIENTS}: "
+              f"{n} clips, added to every fold's TRAIN group and to nothing else")
 
     # ---------------------------------------------------------------- folds
     folds = make_all_folds()
@@ -120,13 +130,29 @@ def main():
     for f in folds:
         d = folds_dir / f.test_patient
         d.mkdir(parents=True, exist_ok=True)
-        train = [c for p in f.train_patients for c in by_patient[p]]
+        train = [c for p in f.all_train_patients for c in by_patient[p]]   # D34
         val = [c for p in f.val_patients for c in by_patient[p]]
         test = list(by_patient[f.test_patient])
+
+        # Assert rather than trust: no clip of the held-out patient, and no clip of a
+        # validation patient, may appear in the training set. Names carry the patient,
+        # so this is checkable on the actual clips and not only on the patient lists.
+        from src.utils.naming import patient_of as _po
+        tr_p = {_po(n) for n, _ in train}
+        assert f.test_patient not in tr_p, f"LEAK: {f.test_patient} clips in train"
+        assert not (tr_p & set(f.val_patients)), \
+            f"LEAK: validation patients {tr_p & set(f.val_patients)} in train"
+        assert tr_p == set(f.all_train_patients), \
+            f"train set is {sorted(tr_p)}, expected {list(f.all_train_patients)}"
+        assert not ({_po(n) for n, _ in val} & set(config.TRAINING_ONLY_PATIENTS)), \
+            "a training-only patient reached the validation set"
+        assert _po(test[0][0]) == f.test_patient
         (d / "fold.json").write_text(json.dumps({
             "test_patient": f.test_patient,
             "val_patients": list(f.val_patients),
             "train_patients": list(f.train_patients),
+            "training_only_patients": list(f.training_only),
+            "all_train_patients": list(f.all_train_patients),
             "semiology": {p: config.SEMIOLOGY[p]
                           for p in (f.test_patient, *f.val_patients, *f.train_patients)},
             "n_train_clips": len(train), "n_val_clips": len(val),

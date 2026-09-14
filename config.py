@@ -72,6 +72,19 @@ PATCHES_DIR = PROCESSED_DIR / "patches"          # shared: adding patients adds 
 #   src.data.dataset casts to float on load, so mixed-dtype stores read identically.
 #   Do NOT use this for evaluation clips.
 PATCH_STORE_DTYPE = os.environ.get("VSVIG_PATCH_DTYPE", "float32")
+
+# [DECISION D34] Training-only patients. Patients that may be TRAINED on but are never
+#   a validation or test patient. The six D2 exclusions qualify: they have 15 seizures
+#   between them but only 29 interictal clips in total, so they cannot support an
+#   FDR/h denominator or a Pool A (D30, D31) -- yet they are perfectly good ictal
+#   training data when the cohort patients supply the interictal side.
+#   Empty by default; the all-data experiment opts in:
+#       VSVIG_TRAINING_ONLY=pat05,pat10,pat11,pat12,pat13,pat14
+#   They are added to every fold's TRAIN group and to none of its others. Enforced in
+#   src.data.splits.verify_no_leak, not merely intended.
+TRAINING_ONLY_PATIENTS = [x.strip().lower()
+                          for x in os.environ.get("VSVIG_TRAINING_ONLY", "").split(",")
+                          if x.strip()]
 KPTS_DIR = PROCESSED_DIR / "kpts"                # shared, same reason
 LABELS_JSON = PROCESSED_DIR / f"labels{_SUF}.json"
 FOLDS_DIR = PROCESSED_DIR / f"folds{_SUF}"

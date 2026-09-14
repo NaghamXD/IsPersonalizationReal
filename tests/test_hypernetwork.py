@@ -170,3 +170,38 @@ def test_backbone_logits_path_matches_the_probability_path():
         logit = m(d, k, return_logits=True)
     assert torch.allclose(torch.sigmoid(logit), prob, atol=1e-6)
     assert prob.shape == logit.shape
+
+
+# ------------------------------------------------------- D34 training-only patients
+def test_training_only_patients_join_train_and_nothing_else():
+    from src.data.splits import make_all_folds, verify_no_leak
+    extra = ("patX", "patY")
+    folds = make_all_folds(training_only=extra)
+    assert verify_no_leak(folds) == []
+    for f in folds:
+        assert set(f.training_only) == set(extra)
+        assert set(extra) <= set(f.all_train_patients)
+        assert not (set(extra) & set(f.val_patients)), "reached validation"
+        assert f.test_patient not in extra, "became a test patient"
+        assert set(f.all_train_patients) == set(f.train_patients) | set(extra)
+
+
+def test_a_patient_cannot_be_both_cohort_and_training_only():
+    from src.data.splits import make_fold
+    try:
+        make_fold(config.COHORT[0], training_only=(config.COHORT[1],))
+    except ValueError as e:
+        assert "cannot be both" in str(e)
+    else:
+        raise AssertionError("a cohort patient was accepted as training-only")
+
+
+def test_leak_check_catches_a_training_only_patient_in_validation():
+    from src.data.splits import Fold, verify_no_leak
+    bad = Fold(test_patient="pat01", val_patients=("pat04", "patZ"),
+               train_patients=("pat02",), training_only=("patZ",))
+    assert any("training-only patient used for validation" in r[1]
+               for r in verify_no_leak([bad]))
+    worse = Fold(test_patient="patZ", val_patients=("pat04",),
+                 train_patients=("pat02",), training_only=("patZ",))
+    assert any("training-only" in r[1] for r in verify_no_leak([worse]))

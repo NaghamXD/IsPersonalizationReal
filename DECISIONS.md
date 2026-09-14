@@ -951,6 +951,42 @@ re-extraction. Deleting `last_checkpoint.pth` (0.56 GB), the archived superseded
 D32 freeze for less than float16 gives for free.
 
 
+## D34. Training-only patients: trained on, never validated or tested on
+
+**Date:** 2026-09-14.
+
+The six D2 exclusions hold 15 seizures but only 29 interictal clips between them. That
+makes them unusable as evaluation patients (no FDR/h denominator), unusable as
+hypernetwork training patients (no Pool A, D30) and unusable as a standalone backbone
+(D31) — but perfectly good ictal training data once the cohort patients supply the
+interictal side.
+
+`config.TRAINING_ONLY_PATIENTS` (empty by default, set by `VSVIG_TRAINING_ONLY`) adds
+them to **every fold's training group and to nothing else**. The evaluation design is
+unchanged: the same eight test patients, the same test clips, the same semiology-
+stratified validation pairs drawn from the eight-patient cohort. Only the training set
+grows, which is what makes the comparison against Phase 1 a controlled one — cohort size
+is the single thing that differs.
+
+Confirmed: with no training-only patients set, `build_splits.py` reproduces the Phase 1
+fold assignments exactly.
+
+**Enforced, not intended.** `Fold` gained a `training_only` field and an
+`all_train_patients` property; `verify_no_leak` now also rejects a training-only patient
+appearing as a validation or test patient, and `make_fold` refuses a patient listed as
+both cohort and training-only. `build_splits.py` then asserts on the actual clip names —
+not just the patient lists — that no held-out or validation clip is in the training set
+and that the training set is exactly the expected patients. Three tests cover it.
+
+**The experiment this enables.** Each fold's training set grows from ~2,500 clips to
+~3,700 (+49%) and from about 13 seizures to about 28. It repairs neither D26's saturated
+objective nor the five-patient amortisation count, so it is a baseline experiment rather
+than a hypernetwork repair. Its value is that it tests the explanation most likely to be
+raised against the Phase 1 negative result: if 8 -> 14 training patients moves LOPO
+generalisation substantially, the bottleneck is cohort size; if it does not, the
+bottleneck lies elsewhere and the negative result rests on firmer ground.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been

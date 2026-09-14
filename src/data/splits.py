@@ -24,6 +24,12 @@ class Fold:
     test_patient: str
     val_patients: tuple
     train_patients: tuple
+    training_only: tuple = ()          # D34: trained on, never validated or tested on
+
+    @property
+    def all_train_patients(self) -> tuple:
+        """Everyone whose clips enter the training set."""
+        return tuple(sorted(set(self.train_patients) | set(self.training_only)))
 
     def describe(self, semiology):
         def tag(p):
@@ -33,9 +39,17 @@ class Fold:
                 f"train=[{', '.join(tag(p) for p in self.train_patients)}]")
 
 
-def make_fold(test_patient, cohort=None, semiology=None, seed=None, fold_index=0):
-    """One LOPO fold with a stratified validation pair."""
+def make_fold(test_patient, cohort=None, semiology=None, seed=None, fold_index=0,
+              training_only=None):
+    """One LOPO fold with a stratified validation pair.
+
+    `training_only` patients (D34) join the training group and nothing else. They take
+    no part in the semiology-stratified validation draw, because they are never
+    eligible to be a validation or test patient.
+    """
     cohort = cohort or config.COHORT
+    training_only = tuple(sorted(config.TRAINING_ONLY_PATIENTS if training_only is None
+                                 else training_only))
     semiology = semiology or config.SEMIOLOGY
     seed = config.FOLD_SEED if seed is None else seed
 
@@ -55,13 +69,20 @@ def make_fold(test_patient, cohort=None, semiology=None, seed=None, fold_index=0
     rng = random.Random(seed + fold_index)
     val = (rng.choice(pg), rng.choice(focal))
     train = tuple(p for p in others if p not in val)
+    overlap = set(training_only) & set(cohort)
+    if overlap:
+        raise ValueError(
+            f"{sorted(overlap)} are listed as training-only but are also in the "
+            f"evaluation cohort. A patient cannot be both: training-only patients are "
+            f"never eligible for validation or test, and cohort patients always are.")
     return Fold(test_patient=test_patient, val_patients=tuple(sorted(val)),
-                train_patients=tuple(sorted(train)))
+                train_patients=tuple(sorted(train)), training_only=training_only)
 
 
-def make_all_folds(cohort=None, semiology=None, seed=None):
+def make_all_folds(cohort=None, semiology=None, seed=None, training_only=None):
     cohort = cohort or config.COHORT
-    return [make_fold(p, cohort, semiology, seed, fold_index=i)
+    return [make_fold(p, cohort, semiology, seed, fold_index=i,
+                      training_only=training_only)
             for i, p in enumerate(sorted(cohort))]
 
 
@@ -75,4 +96,9 @@ def verify_no_leak(folds):
             bad.append((f.test_patient, "in val"))
         if set(f.train_patients) & set(f.val_patients):
             bad.append((f.test_patient, "train/val overlap"))
+        # D34: a training-only patient must never reach validation or test.
+        if f.test_patient in f.training_only:
+            bad.append((f.test_patient, "held-out patient is marked training-only"))
+        if set(f.training_only) & set(f.val_patients):
+            bad.append((f.test_patient, "training-only patient used for validation"))
     return bad
