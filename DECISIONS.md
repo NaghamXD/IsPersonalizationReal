@@ -913,6 +913,44 @@ periodic weights and recovers 0.86 GB. Running out mid-preprocessing would be re
 (extraction is idempotent and resumes) but running out mid-training would not be.
 
 
+## D33. New clips are stored as float16, because disk is the binding constraint
+
+**Date:** 2026-09-14. Free space: 9.8 GB. The all-data run at float32 needs 8.29 GB and
+would leave 2.41 GB — too little to survive a 15-hour training run safely.
+
+A clip is 30x15x3x32x32 = 1,382,400 values: **5.53 MB as float32, 2.76 MB as float16**.
+Extracting the six excluded patients at float16 costs 3.38 GB instead of 6.76, so the
+run needs 4.90 GB and leaves 4.90 GB.
+
+Measured, not assumed, on real clips through the real loader and the real backbone:
+
+| | |
+|---|---|
+| max input difference after the float16 round trip | 2.2e-03 |
+| max model-output difference | 2.6e-03 |
+| clip ranking | unchanged |
+
+**Why this is safe here and would not be elsewhere.** The six excluded patients are
+training-only: they are never a test patient and never a validation patient, so a
+perturbation of their stored inputs cannot reach any reported metric. It only slightly
+changes what the backbone learns from, at a magnitude far below augmentation noise. The
+same change applied to evaluation clips would be unacceptable, since 2.6e-03 on an
+output probability is larger than the personalisation effect Phase 1 was measuring
+(~5e-04 AUC). `PATCH_STORE_DTYPE` therefore defaults to float32 and must be opted into.
+
+Phase 1's clips are untouched. `src.data.dataset` casts to float on load, so a mixed
+float32/float16 store reads identically.
+
+**Alternatives rejected.** uint8 would have cost 1.69 GB, but quantising to 1/255 would
+introduce a difference that correlates perfectly with which patients are excluded — in a
+project about detecting patient-correlated signal, that is a cue worth not creating.
+Converting Phase 1's 34 GB of existing clips to float16 would free ~17 GB, but it
+rewrites the inputs every Phase 1 number was computed from and is reversible only by
+re-extraction. Deleting `last_checkpoint.pth` (0.56 GB), the archived superseded runs
+(0.41 GB) and the periodic epoch weights (0.93 GB) would recover 1.9 GB but breaks the
+D32 freeze for less than float16 gives for free.
+
+
 ## Open
 
 - **Nothing extracted yet.** `preprocess.py` and `extract_test_clips.py` have both been

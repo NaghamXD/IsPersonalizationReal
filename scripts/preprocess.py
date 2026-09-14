@@ -145,7 +145,8 @@ def extract_patient(patient, plan, net, g_filter, device, force=False):
                                          net, g_filter, device)
             if patches is None:
                 n_fail += 1; continue
-            torch.save(torch.from_numpy(patches).float(), dst)
+            _dt = getattr(torch, getattr(config, "PATCH_STORE_DTYPE", "float32"))
+            torch.save(torch.from_numpy(patches).to(_dt), dst)      # D33
             torch.save(torch.from_numpy(kpts).float(), k_dir / f"{name}.pt")
             labels[name] = w.label; n_new += 1
             if (n_new + n_skip) % 200 == 0:

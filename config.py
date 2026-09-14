@@ -59,6 +59,19 @@ _SUF = f"_{RUN_NAME}" if RUN_NAME else ""
 
 PROCESSED_DIR = Path("processed_data")
 PATCHES_DIR = PROCESSED_DIR / "patches"          # shared: adding patients adds files
+
+# [DECISION D33] Storage dtype for newly extracted patches. Phase 1's clips are
+#   float32 and are not touched. A clip is 30x15x3x32x32 = 1,382,400 values: 5.53 MB as
+#   float32, 2.76 MB as float16. Extracting the six excluded patients at float32 would
+#   need 6.76 GB against 9.8 GB free; at float16, 3.38 GB.
+#   Measured cost of the round trip on real clips: max input difference 2.2e-03, max
+#   model-output difference 2.6e-03, clip ranking unchanged. Safe HERE specifically
+#   because these patients are training-only -- they are never a test or validation
+#   patient, so the perturbation cannot reach any reported metric; it only slightly
+#   perturbs what the backbone learns from, far below augmentation-level noise.
+#   src.data.dataset casts to float on load, so mixed-dtype stores read identically.
+#   Do NOT use this for evaluation clips.
+PATCH_STORE_DTYPE = os.environ.get("VSVIG_PATCH_DTYPE", "float32")
 KPTS_DIR = PROCESSED_DIR / "kpts"                # shared, same reason
 LABELS_JSON = PROCESSED_DIR / f"labels{_SUF}.json"
 FOLDS_DIR = PROCESSED_DIR / f"folds{_SUF}"
