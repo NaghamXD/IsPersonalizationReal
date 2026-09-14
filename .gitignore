@@ -32,6 +32,7 @@ outputs/**/*.json
 !outputs/**/pooled.json
 outputs/**/*.csv
 outputs/**/*.png
+!outputs/*.pdf
 
 # Processed data tensors
 processed_data/patches/
