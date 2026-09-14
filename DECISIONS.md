@@ -987,6 +987,69 @@ generalisation substantially, the bottleneck is cohort size; if it does not, the
 bottleneck lies elsewhere and the negative result rests on firmer ground.
 
 
+## D35. Pre-registered evaluation rules, fixed before the all-data results were seen
+
+**Date:** 2026-09-14. Set by the user; recorded here in advance of any result.
+
+**1. pat09.** Reported both ways. Its model suffers feature collapse — held-out
+within-source AUC 0.180, i.e. anti-correlated (D22) — and it is the most influential
+single point in any correlation at this n. §3.5's primary variance and effect-size
+claims use the **n = 7** subset excluding it; **n = 8** appears in every raw table, and
+the collapse is stated explicitly in the text rather than left for a reader to infer.
+
+**2. Resolution cutoff.** A fold with fewer than **50 ordered ictal-vs-interictal pairs**
+is structurally excluded from every aggregate ROC-AUC calculation, because below that the
+metric's step size exceeds the effect under test. Those folds are evaluated **exclusively
+on discrete clinical metrics** — event-level sensitivity and FDR/h at the 60 s refractory.
+
+This removes pat04 (14 pairs, step 0.071) and pat03 (41 pairs, step 0.024). The cutoff is
+not knife-edge: the next fold up has **1,206** pairs, a 29x gap, so any threshold between
+42 and 1,206 gives the same partition. `config.MIN_EVAL_PAIRS`, enforced by
+`src.eval.metrics.auc_resolvable`, with a test asserting the partition is stable across
+thresholds of 50, 100, 500 and 1,000.
+
+**3. The 14-patient Stage 7 repeat is approved** — signatures rebuilt on the new
+backbones, eight hypernetwork runs, shuffled-z control.
+
+**4. The BatchNorm asymmetry is a stated limitation**, not a retrain. The adapted arm's
+patient-homogeneous batches with frozen BatchNorm versus the baseline's shuffled batches
+with live BatchNorm remains a formal methodological limitation in the discussion. The
+adapted arm failed by a margin far larger than any plausible batching effect.
+
+### Applied retroactively to Phase 1
+
+| analysis set | own − shuffled | p (exact sign-flip) | positive |
+|---|---|---|---|
+| n = 8, as previously reported | −0.00036 | 0.0625 | 2/8 |
+| n = 6, D35 pair cutoff | −0.00048 | 0.0625 | 1/6 |
+| n = 5, cutoff + pat09 exclusion | −0.00040 | 0.1250 | 1/5 |
+
+The conclusion is unchanged under every set. Note that the n = 8 figures already in the
+Phase 1 report were computed before these rules existed and must be relabelled as the
+"all folds" row rather than the primary analysis.
+
+### A consequence of combining rules 1 and 2, and how it resolves
+
+Applied to an **AUC-based** benefit, the two rules compound: pat03 and pat04 leave by
+rule 2, pat09 by rule 1, and §3.5's primary analysis falls to **n = 5**.
+
+It does not compound if §3.5 uses the benefit the methodology actually defines — "the
+reduction in False Detection Rate per hour achieved by the adapted model versus the
+unadapted population baseline". FDR/h *is* the discrete clinical metric rule 2 assigns to
+low-pair folds, so pat03 and pat04 remain eligible and §3.5's primary analysis is
+**n = 7**, exactly as rule 1 intends.
+
+**Decision: §3.5's primary benefit is the FDR/h reduction, n = 7.** The AUC-based version
+is reported as a secondary analysis at n = 5 and labelled as such. Phase 1's exploratory
+§3.5 correlations used AUC differences and are therefore secondary, not primary.
+
+**This exposes missing work.** `scripts/evaluate.py` still raises `NotImplementedError`
+for `--model adapted`: the clinical decision pipeline — accumulation, refractory, FDR/h —
+has only ever been run on the baseline. `evaluate_adapted.py` reports AUC alone. §3.5 as
+now defined cannot be computed until the adapted arm is scored through that pipeline at
+each fold's pre-selected DT. Required before the paper, and not previously on the list.
+
+
 ## Open
 
 Updated 2026-09-14, after Phase 1 concluded and the all-data run began. Everything above
@@ -994,17 +1057,21 @@ D16 that was once listed here is resolved; the entries below are what actually r
 
 ### Decisions owed before the all-data numbers are seen
 
-Both must be fixed in advance, or they become post-hoc choices made with knowledge of
-the result.
+~~Both resolved as D35 on 2026-09-14, before any all-data result was seen.~~
 
-- **pat09 in or out of §3.5.** Its model is anti-correlated on its own held-out patient
+- ~~**pat09 in or out of §3.5.** Its model is anti-correlated on its own held-out patient
   (within-source AUC 0.180, D22) and it is the single most influential point in any
   correlation at n = 8. Report §3.5 with and without it, and say so before looking.
 - **pat03 and pat04's metric.** Their within-recording AUC rests on 41 and 14 ordered
   pairs, so it moves in steps of 0.024 and 0.071 against effects of ~0.0005. Either
   report event-level sensitivity and FDR/h for them in place of AUC, or exclude them
   from AUC analyses under a rule stated in advance. They currently sit inside D22's
-  0.678 baseline mean without qualification.
+  0.678 baseline mean without qualification.~~ — RESOLVED as D35.
+
+- **NEW, surfaced by D35: the adapted arm has no clinical metrics.** `evaluate.py`
+  raises `NotImplementedError` for `--model adapted`, so sensitivity, FDR/h and latency
+  have never been computed for the hypernetwork. §3.5's primary analysis now depends on
+  them. Blocking for the paper.
 
 ### Work remaining after the all-data run finishes
 

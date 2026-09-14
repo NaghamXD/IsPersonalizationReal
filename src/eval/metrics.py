@@ -263,3 +263,18 @@ def within_source_auc(scores, labels, sources):
         "n_sources_seen": len(per),
         "n_pairs": int(den),
     }
+
+
+def eval_pairs(per_source) -> int:
+    """Ordered ictal-vs-interictal pairs behind a within-source AUC.
+
+    The AUC's resolution is 1/pairs. D35 excludes a fold from aggregate AUC analyses
+    when this falls below config.MIN_EVAL_PAIRS, because below that the metric's step
+    size exceeds the effect under test and the number is not evidence either way.
+    """
+    return int(sum(d["n_pos"] * d["n_neg"] for d in per_source.values()))
+
+
+def auc_resolvable(per_source, minimum=None) -> bool:
+    minimum = config.MIN_EVAL_PAIRS if minimum is None else minimum
+    return eval_pairs(per_source) >= minimum

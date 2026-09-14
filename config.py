@@ -82,6 +82,20 @@ PATCH_STORE_DTYPE = os.environ.get("VSVIG_PATCH_DTYPE", "float32")
 #       VSVIG_TRAINING_ONLY=pat05,pat10,pat11,pat12,pat13,pat14
 #   They are added to every fold's TRAIN group and to none of its others. Enforced in
 #   src.data.splits.verify_no_leak, not merely intended.
+# [DECISION D35] Pre-registered evaluation rules, fixed 2026-09-14 BEFORE the all-data
+#   results were seen.
+#   1. A fold with fewer than MIN_EVAL_PAIRS ordered ictal-vs-interictal pairs is
+#      structurally excluded from every aggregate ROC-AUC calculation: its metric's step
+#      size exceeds the effects under test. Such folds are evaluated on discrete clinical
+#      metrics instead (event-level sensitivity, FDR/h at the 60 s refractory).
+#      The threshold sits in a 29x gap -- pat03 has 41 pairs, pat04 has 14, and the next
+#      fold up has 1206 -- so no fold sits near the boundary.
+#   2. pat09 suffers feature collapse (held-out within-source AUC 0.180, anti-correlated;
+#      D22). Section 3.5's primary variance and effect-size claims use the n=7 subset
+#      without it; n=8 appears in every raw table.
+MIN_EVAL_PAIRS = 50
+SECTION_35_EXCLUDE = ["pat09"]        # primary analysis only; n=8 also reported
+
 TRAINING_ONLY_PATIENTS = [x.strip().lower()
                           for x in os.environ.get("VSVIG_TRAINING_ONLY", "").split(",")
                           if x.strip()]

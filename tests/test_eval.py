@@ -325,3 +325,34 @@ def test_within_source_auc_patient_balanced_equals_pair_weighted_for_one_patient
     r = within_source_auc(scores, labels, ["patA_Sz1", "patA_Sz1", "patA_Sz2", "patA_Sz2"])
     assert abs(r["patient_balanced"] - r["pair_weighted"]) < 1e-12
     assert r["n_patients_used"] == 1
+
+
+# ------------------------------------------------------------ D35 resolution cutoff
+def test_eval_pairs_and_the_resolution_cutoff():
+    """D35: a fold whose AUC moves in steps larger than the effect under test is not
+    evidence either way and is excluded from aggregate AUC analyses."""
+    import config
+    from src.eval.metrics import auc_resolvable, eval_pairs
+
+    pat04 = {"pat04_Sz1": {"n_pos": 7, "n_neg": 2},
+             "pat04_free": {"n_pos": 0, "n_neg": 356},
+             "pat04_free2": {"n_pos": 0, "n_neg": 191}}
+    pat03 = {"pat03_Sz1": {"n_pos": 13, "n_neg": 1},
+             "pat03_Sz2": {"n_pos": 14, "n_neg": 2}}
+    pat06 = {"pat06_Sz1": {"n_pos": 14, "n_neg": 54},
+             "pat06_Sz2": {"n_pos": 25, "n_neg": 9},
+             "pat06_Sz3": {"n_pos": 25, "n_neg": 9}}
+
+    assert eval_pairs(pat04) == 14        # single-class recordings contribute nothing
+    assert eval_pairs(pat03) == 13 + 28
+    assert eval_pairs(pat06) == 756 + 225 + 225
+
+    assert not auc_resolvable(pat04)
+    assert not auc_resolvable(pat03)
+    assert auc_resolvable(pat06)
+
+    # The cutoff must not sit on a knife edge: the gap between excluded and included
+    # is 41 -> 1206, so any threshold in that range gives the same partition.
+    for m in (50, 100, 500, 1000):
+        assert not auc_resolvable(pat03, m) and auc_resolvable(pat06, m)
+    assert config.MIN_EVAL_PAIRS == 50
