@@ -222,13 +222,16 @@ def test_adapted_model_wraps_the_backbone_without_mutating_it():
 
     d = torch.randn(2, 30, 15, 3, 32, 32)
     kp = torch.randn(2, 30, 15, config.KPT_CHANNELS)
+    # Compare LOGITS, not probabilities: an untrained VSViG_base produces enormous
+    # logits on random input, so its sigmoid saturates to exactly 1.0 for both
+    # conditions and a probability comparison cannot tell them apart. (That is what
+    # made the first version of this test fail while the code was correct.)
     with torch.no_grad():
-        adapted = am(d, kp)
-        plain_after = m(d, kp)
+        adapted = am(d, kp, return_logits=True)
+        plain_after = m(d, kp, return_logits=True)
     for k, v in t.items():
         assert torch.equal(v.weight, before[k]), f"{k} left modified"
     assert not torch.allclose(adapted, plain_after), "deltas had no effect"
     assert am.z_source == "patX"
     with torch.no_grad():
-        assert torch.allclose(torch.sigmoid(am(d, kp, return_logits=True)), adapted,
-                              atol=1e-6)
+        assert torch.allclose(torch.sigmoid(adapted), am(d, kp), atol=1e-6)
