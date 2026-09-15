@@ -225,7 +225,31 @@ def train_one(fold, args):
     va_by, va_lab = group_by_patient(val_ds)
 
     assert fold not in tr_by and fold not in va_by, f"LEAK: {fold} appears in training"
-    assert set(tr_by) <= set(meta["train_patients"]), "unexpected training patients"
+
+    # The hypernetwork can only train on patients that HAVE a z_behavior. Under D34 the
+    # backbone's training set also contains the six training-only patients, and D30
+    # established those cannot supply a signature: z needs a Pool A of
+    # config.POOL_A_SIZE interictal clips and only pat05 has enough pre-onset footage.
+    # They served their purpose as backbone data; they are not eligible here.
+    #
+    # This is a real limitation, not a technicality. It means the all-data repeat tests
+    # whether a differently-trained backbone changes the answer -- it does NOT raise the
+    # amortisation count, which stays at the same five patients. D26's second fault is
+    # not addressable with this corpus.
+    no_sig = sorted(set(tr_by) - set(zs))
+    if no_sig:
+        n_drop = sum(len(tr_by[p]) for p in no_sig)
+        print(f"  [D30] excluding {no_sig} from hypernetwork training: no z_behavior "
+              f"(too few interictal clips for a Pool A). {n_drop} clips dropped; they "
+              f"remain in the BACKBONE's training set.")
+        for p in no_sig:
+            tr_by.pop(p); tr_lab.pop(p)
+    assert set(tr_by) == set(meta["train_patients"]), (
+        f"hypernetwork training patients are {sorted(tr_by)}, expected "
+        f"{sorted(meta['train_patients'])}")
+    assert not (set(va_by) - set(zs)), (
+        f"validation patients without a signature: {sorted(set(va_by) - set(zs))}")
+    assert tr_by, "no eligible hypernetwork training patients remain"
 
     tr_s = CyclicBatchSampler(tr_by, tr_lab, seed=seed)
     va_s = CyclicBatchSampler(va_by, va_lab, seed=seed + 1, shuffle_batches=False)

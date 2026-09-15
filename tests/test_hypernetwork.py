@@ -235,3 +235,33 @@ def test_adapted_model_wraps_the_backbone_without_mutating_it():
     assert am.z_source == "patX"
     with torch.no_grad():
         assert torch.allclose(torch.sigmoid(adapted), am(d, kp), atol=1e-6)
+
+
+def test_training_only_patients_are_ineligible_for_the_hypernetwork():
+    """D30/D34 interaction. The backbone may train on patients that cannot supply a
+    z_behavior; the hypernetwork may not, because every batch needs one. The six
+    training-only patients have too few interictal clips for a Pool A, so Stage 7 must
+    drop them from ITS training set while they stay in the backbone's.
+
+    Without this the run dies on an assertion (as it did), and a more permissive
+    version would have been worse: a .get() default would silently inject the wrong
+    patient's signature.
+    """
+    import json
+    from pathlib import Path
+    fold_dir = Path(config.FOLDS_DIR)
+    if not (fold_dir / "pat01" / "fold.json").exists():
+        return                                        # folds not built in this checkout
+    meta = json.loads((fold_dir / "pat01" / "fold.json").read_text())
+    train_only = set(meta.get("training_only_patients", []))
+    if not train_only:
+        return                                        # not an all-data run
+    sig = Path(config.SIGNATURES_DIR) / "pat01" / "z_behavior.npz"
+    if not sig.exists():
+        return
+    import numpy as np
+    have = set(np.load(sig).files)
+    assert not (train_only & have), (
+        "a training-only patient has a signature; D30 said none could. Either the "
+        "Pool A rule changed or the wrong signature file is being read.")
+    assert set(meta["train_patients"]) <= have, "a cohort training patient lacks z"
