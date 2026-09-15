@@ -17,7 +17,8 @@ from src.eval.metrics import within_source_auc
 from src.model.vsvig import VSViG_base
 
 DEV = torch.device("cpu")
-OUT = Path.home() / "scratch" / "score_matrix.json"
+OUT = Path(config.RESULTS_DIR) / "baseline" / "lopo_score_matrix.json"
+OUT.parent.mkdir(parents=True, exist_ok=True)
 
 def load(p):
     m = VSViG_base(kpt_channels=config.KPT_CHANNELS)
@@ -38,8 +39,8 @@ def run(m, clips, folder):
 
 res = json.loads(OUT.read_text()) if OUT.exists() else {}
 for fold in sys.argv[1:]:
-    meta = json.loads((Path("processed_data/folds") / fold / "fold.json").read_text())
-    ck = Path("outputs/lopo/checkpoints") / fold / "final_model.pth"
+    meta = json.loads((Path(config.FOLDS_DIR) / fold / "fold.json").read_text())
+    ck = Path(config.BASELINE_CKPT_ROOT) / fold / "final_model.pth"
     m = load(ck)
     for pat in [meta["test_patient"]] + meta["val_patients"]:
         p, y, s = run(m, f"processed_data/test_sliding/manifest_{pat}.json",

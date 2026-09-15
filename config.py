@@ -114,7 +114,6 @@ HYPER_CKPT_ROOT = OUTPUTS_DIR / f"lopo_hypernetwork{_SUF}" / "checkpoints"
 SIGNATURES_DIR = OUTPUTS_DIR / f"signatures{_SUF}"
 RESULTS_DIR = OUTPUTS_DIR / f"results{_SUF}"
 THRESHOLDS_DIR = OUTPUTS_DIR / f"thresholds{_SUF}"
-RESULTS_DIR = OUTPUTS_DIR / "results"
 
 POSE_WEIGHTS = Path("pose.pth")
 DYNAMIC_PARTITION_FILE = Path("dy_point_order.pt")

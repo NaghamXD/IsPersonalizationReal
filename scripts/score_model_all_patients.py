@@ -35,7 +35,7 @@ def run(m, clips, folder):
     return np.concatenate(P), np.concatenate(Y), S
 
 if __name__ == "__main__":
-    m = load("outputs/lopo/checkpoints/pat01/best_model.pth")
+    m = load(Path(config.BASELINE_CKPT_ROOT) / "pat01" / "final_model.pth")
     res = json.loads(OUT.read_text()) if OUT.exists() else {}
     for pat in sys.argv[1:]:
         p, y, s = run(m, f"processed_data/test_sliding/manifest_{pat}.json",

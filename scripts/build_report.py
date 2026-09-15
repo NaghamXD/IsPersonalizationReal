@@ -29,14 +29,14 @@ RULE = colors.HexColor("#c8d0d8")
 # ------------------------------------------------------------------ data
 def load():
     C = sorted(config.COHORT)
-    mat = json.loads(Path("outputs/results/baseline/lopo_score_matrix.json").read_text())
+    mat = json.loads(Path(config.RESULTS_DIR) / "baseline" / "lopo_score_matrix.json".read_text())
     pairs = {r["patient"]: sum(d["n_pos"] * d["n_neg"] for d in r["per_source"].values())
              for r in mat.values() if r["role"] == "held_out"}
-    probe = json.loads(Path("outputs/signatures/identity_probe.json").read_text())
+    probe = json.loads(Path(config.SIGNATURES_DIR) / "identity_probe.json".read_text())
     rows = []
     for f in C:
-        d = json.loads(Path(f"outputs/results/adapted/{f}.json").read_text())
-        z = np.load(f"outputs/signatures/{f}/z_behavior.npz")
+        d = json.loads(Path(config.RESULTS_DIR) / "adapted" / f"{f}.json".read_text())
+        z = np.load(Path(config.SIGNATURES_DIR) / f / "z_behavior.npz")
         meta = json.loads(Path(config.FOLDS_DIR, f, "fold.json").read_text())
         c = np.stack([z[q] for q in meta["train_patients"]]).mean(0)
         rows.append({**d, "pairs": pairs[f], "D_p": float(np.linalg.norm(z[f] - c))})
