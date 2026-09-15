@@ -1161,6 +1161,79 @@ threshold-dependent analysis is then free.
 **Compute approved: ~45 min of inference, no training.**
 
 
+## D38. The clinical arm ran. Section 3.5's predicted sign appears -- and it is exposure
+
+**Date:** 2026-09-15, under D37's rules, which were fixed before any of these numbers
+existed. Full tables: `outputs/results_alldata/SECTION_35_CLINICAL.md`.
+
+### Test 1, personalisation (z > 2.0)
+
+**Phase 1: 1 of 4 defined z-scores passes. All-data: 0 of 3.** The single pass is pat02
+at z = +2.27, and D37's requirement to print raw counts beside every rate is what makes
+it readable: own-z produced **31** false alarms, the seven shuffled-z conditions produced
+[31, 32, 32, 32, 32, 32, 32]. The pass is **one false alarm out of thirty-one**, over
+0.633 h. It does not replicate -- the same fold on the 14-patient backbone is z = +1.35.
+
+The metric is coarser than AUC, which D37 anticipated but understated: in **13 of 16
+fold-experiments the own-z alarm count equals every shuffled-z count exactly**, so z is
+undefined in 9 of 16. Nine of the sixteen cells of the experiment cannot answer the
+question at all.
+
+### Test 2, §3.5's correlation -- the one place the prediction shows up
+
+| cohort | corr(D_p, FDR/h reduction), n = 7 | exact p |
+|---|---|---|
+| 8-patient | **+0.650** | 0.110 |
+| 14-patient | **+0.617** | 0.138 |
+
+Positive in both, similar magnitude, and **stable in sign across cohorts** -- which the
+AUC-based version of the same correlation was not (D36: +0.049 -> -0.134). This is the
+only result in the project that points the way §3.5 predicts. It is reported as such.
+
+### Why it is not evidence for §3.5
+
+FDR/h divides an integer alarm count by an evaluable exposure of 0.097-0.762 h. One
+alarm is worth 1.3 FDR/h in the longest fold and 10.3 in the shortest, so the rate
+amplifies the short folds by a factor of eight. Post hoc, not pre-registered:
+
+| quantity (n = 7) | 8-patient | 14-patient |
+|---|---|---|
+| D_p vs FDR/h reduction (the pre-registered test) | +0.650 | +0.617 |
+| D_p vs the same benefit **counted in alarms** | **-0.037** | +0.433 |
+| D_p vs 1/exposure | +0.455 | +0.714 |
+| 1/exposure vs \|FDR/h reduction\| | +0.766 | +0.764 |
+
+The correlation lives in the division. Remove it and Phase 1's +0.650 becomes **-0.037**;
+the all-data cohort's +0.617 becomes +0.433 at p = 0.34. Leave-one-out says the same
+thing: drop pat06 -- 5.8 minutes of exposure, two alarms -- and Phase 1's r falls from
++0.650 to **-0.089**.
+
+The atypical patients in this cohort are also the short-recording patients. §3.5's
+predicted relationship and that confound are not separable at n = 7 with this exposure.
+
+**This is labelled post hoc and stays labelled.** It was computed after the
+pre-registered result was seen. It cuts against a positive finding rather than
+manufacturing one, which is the safer direction, but the label is not optional.
+
+### What the operating points say about the corpus
+
+Sensitivity is **1.00 in 15 of 16 fold-experiments**, at **28-76 false alarms per hour**.
+D16's Youden's J, given this exposure, selects "alarm almost continuously and catch
+everything". Neither arm is a clinically usable detector at its selected threshold, so
+an FDR/h difference between them is a difference between two unusable operating points.
+That is a property of the corpus -- 3.2 h of evaluable interictal exposure across the
+whole cohort -- not of the hypernetwork, and it bounds what any clinical claim here can
+mean.
+
+### Verdict
+
+Unchanged, and now tested on the metric §3.5 actually defines: **no personalisation**.
+0 of 7 defined z-scores clear the pre-registered threshold on any evidence stronger than
+a single alarm, and §3.5's correlation is exposure rather than atypicality. Combined
+with D36, the method has now failed the pre-registered test on two metrics, two cohorts
+and sixteen fold-experiments.
+
+
 ## Open
 
 Updated 2026-09-14, after Phase 1 concluded and the all-data run began. Everything above
@@ -1179,11 +1252,8 @@ D16 that was once listed here is resolved; the entries below are what actually r
   from AUC analyses under a rule stated in advance. They currently sit inside D22's
   0.678 baseline mean without qualification.~~ — RESOLVED as D35.
 
-- **NEW, surfaced by D35: the adapted arm has no clinical metrics.** ~~`evaluate.py`
-  raises `NotImplementedError` for `--model adapted`~~ — the pipeline was implemented in
-  `4fc0b27`, but it has only been run on fold pat01. Sensitivity, FDR/h and latency are
-  still missing for fifteen of the sixteen fold-experiments, and §3.5's primary analysis
-  depends on them. Still blocking for the paper.
+- ~~**NEW, surfaced by D35: the adapted arm has no clinical metrics.**~~ DONE as
+  **D38**. All nine conditions, all eight folds, both cohorts, per-clip scores saved.
 
 ### Work remaining after the all-data run finishes
 
@@ -1194,9 +1264,9 @@ D16 that was once listed here is resolved; the entries below are what actually r
 - ~~**Repeat Stage 7 on the new backbones.**~~ DONE, recorded as **D36**. Signatures
   rebuilt, eight hypernetwork runs (1.18 h), shuffled-z control. It converted "the method
   failed on an 8-patient training set" into "it failed on 8 and on 14".
-- **§3.5's primary analysis: FDR/h reduction at n = 7.** `evaluate.py --model adapted`
-  now exists but has only been run on fold pat01. Needs all eight folds in both cohorts,
-  at each fold's pre-selected DT. Blocking for the paper.
+- ~~**§3.5's primary analysis: FDR/h reduction at n = 7.**~~ DONE as **D38**.
+- ~~Re-select per-fold decision thresholds for the new backbones.~~ DONE.
+- **The paper.** No draft exists. Every experiment the project needs is now run.
 - Regenerate the Phase 1 PDF to include the all-data cohort (`build_report.py` is now
   run-scoped).
 - Figures. None exist yet.

@@ -1,0 +1,590 @@
+{
+  "fold": "pat08",
+  "decision_threshold": 0.23500000000000001,
+  "dt_selected_on": [
+    "pat03",
+    "pat04"
+  ],
+  "baseline_false_alarms": 25,
+  "exposure_hours": 0.5583333333333333,
+  "zero_baseline_false_alarms": false,
+  "sensitivity_drop": {
+    "own": true,
+    "shuffled_pat01": true,
+    "shuffled_pat02": true,
+    "shuffled_pat03": true,
+    "shuffled_pat04": true,
+    "shuffled_pat06": true,
+    "shuffled_pat07": true,
+    "shuffled_pat09": true
+  },
+  "conditions": {
+    "baseline": {
+      "n_seizures": 3,
+      "n_detected": 3,
+      "sensitivity": 1.0,
+      "n_false_alarms": 25,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 44.776119402985074,
+      "mean_l_eo_s": 20.0,
+      "median_l_eo_s": 17.0,
+      "mean_l_co_s": 5.666666666666667,
+      "median_l_co_s": 11.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth",
+      "z_from": "pat08",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.2633433861942446,
+          "p10": 0.0018735732417553663,
+          "p50": 0.05561451613903046,
+          "p90": 0.9471563458442688,
+          "frac_above_DT": 0.3225806451612903
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.11246095085516572,
+          "p10": 0.017034347541630267,
+          "p50": 0.03961281292140484,
+          "p90": 0.2866039171814918,
+          "frac_above_DT": 0.25
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.4682046655926247,
+          "p10": 0.00404001702554524,
+          "p50": 0.5349438786506653,
+          "p90": 0.998329621553421,
+          "frac_above_DT": 0.5483870967741935
+        },
+        "auc_within_source": 0.7138687709436817,
+        "auc_within_source_pairweighted": 0.7138687709436817,
+        "auc_within_source_macro": 0.6243781961878195,
+        "auc_pooled": 0.6065396622108381,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7523012552301255,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.719551282051282,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.4012820512820513,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "own": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat08]",
+      "z_from": "pat08",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.19361878149714457,
+          "p10": 1.6948793017945726e-06,
+          "p50": 0.0015282960375770926,
+          "p90": 0.9491616845130921,
+          "frac_above_DT": 0.24069478908188585
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.015641592362953816,
+          "p10": 0.0003173794772010297,
+          "p50": 0.0017389466520398855,
+          "p90": 0.04497319683432578,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.40720381678345213,
+          "p10": 9.930020496540237e-06,
+          "p50": 0.2075718566775322,
+          "p90": 0.9999228239059448,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7186250135120528,
+        "auc_within_source_pairweighted": 0.7186250135120528,
+        "auc_within_source_macro": 0.6374614892894181,
+        "auc_pooled": 0.6103017689906347,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7576569037656904,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7111378205128205,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.44358974358974357,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat01": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat01]",
+      "z_from": "pat01",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.19401784411153059,
+          "p10": 1.7014275272231326e-06,
+          "p50": 0.0015517354477196932,
+          "p90": 0.9497031092643738,
+          "frac_above_DT": 0.24069478908188585
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.01583378746818198,
+          "p10": 0.00031860320232226515,
+          "p50": 0.0017415049369446933,
+          "p90": 0.045314981788396824,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.4069414985534592,
+          "p10": 1.0122620096808532e-05,
+          "p50": 0.2096608653664589,
+          "p90": 0.9999222874641418,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7179764349800022,
+        "auc_within_source_pairweighted": 0.7179764349800022,
+        "auc_within_source_macro": 0.6370490022529772,
+        "auc_pooled": 0.6100616345153286,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7568200836820084,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7107371794871795,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.44358974358974357,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat02": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat02]",
+      "z_from": "pat02",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.19407695063470246,
+          "p10": 1.6467437944811546e-06,
+          "p50": 0.0015296543715521693,
+          "p90": 0.9503676056861878,
+          "frac_above_DT": 0.24069478908188585
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.01576124694020109,
+          "p10": 0.00031256092843250376,
+          "p50": 0.0017042134422808886,
+          "p90": 0.04506225194782018,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.4070242318566001,
+          "p10": 9.892089565255446e-06,
+          "p50": 0.21081121265888214,
+          "p90": 0.9999241948127746,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7184088206680359,
+        "auc_within_source_pairweighted": 0.7184088206680359,
+        "auc_within_source_macro": 0.6373499132782606,
+        "auc_pooled": 0.6102217241655327,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7573221757322176,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7111378205128205,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.44358974358974357,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat03": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 21,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 37.61194029850746,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat03]",
+      "z_from": "pat03",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.1999268162847534,
+          "p10": 2.077287172141951e-06,
+          "p50": 0.0020951677579432726,
+          "p90": 0.9465115904808045,
+          "frac_above_DT": 0.24317617866004962
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.019741627082112245,
+          "p10": 0.0004786884645000101,
+          "p50": 0.002727285260334611,
+          "p90": 0.057743690535426134,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.4142322280782905,
+          "p10": 1.021829584715306e-05,
+          "p50": 0.2348327860236168,
+          "p90": 0.9998991668224335,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7198140741541454,
+        "auc_within_source_pairweighted": 0.7198140741541454,
+        "auc_within_source_macro": 0.6410909505417873,
+        "auc_pooled": 0.6105018810533899,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7593305439330544,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7075320512820513,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.4564102564102564,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat04": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat04]",
+      "z_from": "pat04",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.1926169784890681,
+          "p10": 1.7935739379026939e-06,
+          "p50": 0.0015592470299452543,
+          "p90": 0.9472890973091127,
+          "frac_above_DT": 0.23821339950372208
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.0153341167670078,
+          "p10": 0.00032370533226639965,
+          "p50": 0.0017541571869514883,
+          "p90": 0.04432548619806766,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.4059977151429597,
+          "p10": 9.997799679695163e-06,
+          "p50": 0.202715165913105,
+          "p90": 0.9999189496040344,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7194897848881202,
+        "auc_within_source_pairweighted": 0.7194897848881202,
+        "auc_within_source_macro": 0.637536230912277,
+        "auc_pooled": 0.6105819258784919,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.759163179916318,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7111378205128205,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.4423076923076923,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat06": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat06]",
+      "z_from": "pat06",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.20113002046807668,
+          "p10": 2.6270794933225267e-06,
+          "p50": 0.0020458369981497526,
+          "p90": 0.9561160564422608,
+          "frac_above_DT": 0.2506203473945409
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.01890164143696893,
+          "p10": 0.0003930086153559387,
+          "p50": 0.0022822156315669417,
+          "p90": 0.053949065878987304,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.4185903171768945,
+          "p10": 1.4333283979794942e-05,
+          "p50": 0.24759355187416077,
+          "p90": 0.9999216556549072,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7199221705761539,
+        "auc_within_source_pairweighted": 0.7199221705761539,
+        "auc_within_source_macro": 0.6388135437900082,
+        "auc_pooled": 0.6111422396542063,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7588284518828452,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7127403846153846,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.44487179487179485,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat07": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat07]",
+      "z_from": "pat07",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.1945834927276864,
+          "p10": 1.72568556990882e-06,
+          "p50": 0.001565023441798985,
+          "p90": 0.9509132027626038,
+          "frac_above_DT": 0.24069478908188585
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.016079862041806336,
+          "p10": 0.00032054448383860294,
+          "p50": 0.0017319298931397498,
+          "p90": 0.04586247410625219,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.40761498902448584,
+          "p10": 1.0067859329865314e-05,
+          "p50": 0.21461091190576553,
+          "p90": 0.9999249219894409,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7188412063560696,
+        "auc_within_source_pairweighted": 0.7188412063560696,
+        "auc_within_source_macro": 0.6379446277223474,
+        "auc_pooled": 0.6103417914031858,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7578242677824267,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7111378205128205,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.44487179487179485,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    },
+    "shuffled_pat09": {
+      "n_seizures": 3,
+      "n_detected": 2,
+      "sensitivity": 0.6666666666666666,
+      "n_false_alarms": 20,
+      "exposure_hours": 0.5583333333333333,
+      "fdr_per_hour": 35.82089552238806,
+      "mean_l_eo_s": 30.0,
+      "median_l_eo_s": 30.0,
+      "mean_l_co_s": 12.0,
+      "median_l_co_s": 12.0,
+      "checkpoint": "outputs/lopo/checkpoints/pat08/final_model.pth + outputs/lopo_hypernetwork/checkpoints/pat08/hypernetwork_best.pth [z=pat09]",
+      "z_from": "pat09",
+      "decision_threshold": 0.23500000000000001,
+      "probabilities": {
+        "interictal": {
+          "n": 403,
+          "mean": 0.19435283186030594,
+          "p10": 1.7097283034672735e-06,
+          "p50": 0.001594659173861146,
+          "p90": 0.9490517854690552,
+          "frac_above_DT": 0.24069478908188585
+        },
+        "transition": {
+          "n": 8,
+          "mean": 0.016017030184229952,
+          "p10": 0.000321942065784242,
+          "p50": 0.0018036583787761629,
+          "p90": 0.04602348282933234,
+          "frac_above_DT": 0.0
+        },
+        "ictal": {
+          "n": 62,
+          "mean": 0.40731797658503754,
+          "p10": 1.0421740171295824e-05,
+          "p50": 0.20933116227388382,
+          "p90": 0.9999201893806458,
+          "frac_above_DT": 0.5
+        },
+        "auc_within_source": 0.7178683385579937,
+        "auc_within_source_pairweighted": 0.7178683385579937,
+        "auc_within_source_macro": 0.6372870176662018,
+        "auc_pooled": 0.6099015448651245,
+        "auc_per_source": {
+          "pat08_Sz1": {
+            "auc": 0.7566527196652719,
+            "n_pos": 25,
+            "n_neg": 239
+          },
+          "pat08_Sz2": {
+            "auc": 0.7103365384615384,
+            "n_pos": 24,
+            "n_neg": 104
+          },
+          "pat08_Sz3": {
+            "auc": 0.44487179487179485,
+            "n_pos": 13,
+            "n_neg": 60
+          }
+        },
+        "n_sources_used": 3
+      }
+    }
+  }
+}
