@@ -1092,6 +1092,75 @@ feature collapse -- held-out within-source AUC 0.180, anti-correlated with the t
 only (-0.00097, exact p = 0.1875), not because the stated reason still holds.
 
 
+## D37. Section 3.5's primary analysis, pre-registered before the clinical arm is run
+
+**Date:** 2026-09-15. Approved by the user before any FDR/h number exists for the
+adapted arm. D35 established that §3.5's benefit is the FDR/h reduction at n = 7; this
+fixes exactly how that is computed and judged, so nothing is chosen after seeing it.
+
+### What is scored
+
+Every condition is scored on the held-out patient's **Stage 3 sliding-window** clips --
+never the training-strided val clips, whose latency and FDR/h are optimistic by
+construction. Nine conditions per fold: the unadapted baseline, the adapted model under
+the patient's **own** z, and the adapted model under each of the **seven** other
+patients' z. Both cohorts, eight folds: 144 fold-passes, ~48,400 clip scorings.
+
+**The decision threshold is D16's and is not re-tuned.** It is selected on the fold's
+two internal validation patients with the BASELINE backbone, and the same value is
+applied unchanged to all nine conditions. §3.5 is a paired difference; if the arms were
+allowed different thresholds it would partly measure threshold tuning. The 14-patient
+backbones need their own selection pass before any of this.
+
+### The two tests, both fixed in advance
+
+**1. Personalisation (the D28 analogue).** Per fold, the own-z FDR/h reduction against
+the distribution of the seven shuffled-z reductions:
+
+    z = (reduction_own - mean(reduction_shuffled)) / sd(reduction_shuffled)
+
+with the **same pre-registered threshold, z > 2.0**. Without the shuffled arm, an FDR/h
+improvement cannot be told apart from "any perturbation of the weights helps" -- the
+artifact that pat04's two-pair flip already produced once in the AUC analysis.
+
+**2. §3.5's own claim.** corr(D_p, FDR/h reduction) across the n = 7 set, D_p being the
+§3.5 atypicality, with an exact permutation test over **all n! pairings** of D_p to
+benefit -- 5,040 at n = 7, 40,320 at n = 8, both enumerated rather than sampled. §3.5
+predicts POSITIVE.
+
+> Corrected the same day, before any FDR/h number was computed: this rule first said
+> "exact sign-flip permutation test". Sign-flipping is the exact test for a paired
+> difference and the wrong null for a correlation, whose null is that the PAIRING
+> carries no information. Test 1 still uses sign-flipping, where it belongs.
+
+n = 7 is the D35 rule 1 set: all eight folds less pat09. pat03 and pat04 stay in -- FDR/h
+is precisely the discrete metric D35 rule 2 assigns to low-pair folds. Both tests are
+also reported over all eight folds as a secondary row.
+
+### What is reported beside every rate, and why
+
+Evaluable interictal exposure per held-out patient runs 0.10-0.76 h. One false alarm
+moves that patient's rate by 1.3-10 FDR/h -- the metric is coarse in exactly the way AUC
+was for pat03 and pat04. So:
+
+- **Raw false-alarm counts and exposure hours are printed beside every FDR/h.** A rate
+  without its count is not interpretable at this exposure.
+- **A fold whose baseline has zero false alarms is flagged** as structurally unable to
+  show a reduction. It is reported, not silently dropped: its sensitivity can still move.
+- **Sensitivity and latency are reported alongside, and a reduction in FDR/h bought by
+  missing a seizure is not a benefit.** Any fold whose sensitivity falls below baseline
+  is labelled as such and cannot contribute to a benefit claim, whatever its FDR/h does.
+
+### Per-clip scores are saved this time
+
+The Stage 7 run kept only AUCs, so the clinical metrics -- which are a pure function of
+those same per-clip scores -- cost a full re-run of the inference. Every condition now
+writes its scores, labels, sources and clip start times to disk, and every future
+threshold-dependent analysis is then free.
+
+**Compute approved: ~45 min of inference, no training.**
+
+
 ## Open
 
 Updated 2026-09-14, after Phase 1 concluded and the all-data run began. Everything above

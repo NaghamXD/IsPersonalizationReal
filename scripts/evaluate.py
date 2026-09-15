@@ -209,8 +209,17 @@ def evaluate_fold(patient, kind, onsets, device, manifest_path=None, limit=None,
     dt_used, dt_rec = load_fold_threshold(patient)
     model, activation, ckpt = build_model(kind, patient, device, tag, shuffled_z)
 
-    manifest_path = Path(manifest_path) if manifest_path else \
-        Path(config.FOLDS_DIR) / f"val_{patient}.json"
+    # D37: default to the Stage 3 sliding-window clips. The old default was the
+    # fold's training-strided val_ manifest, whose ictal and transition clips overlap
+    # by 4 s -- latency and FDR/h computed from it are optimistic by construction, and
+    # the caller only found out from a warning further down. Stage 3 exists now, so the
+    # honest manifest is the default and the optimistic one must be asked for.
+    if manifest_path:
+        manifest_path = Path(manifest_path)
+    else:
+        sliding = Path("processed_data/test_sliding") / f"manifest_{patient}.json"
+        manifest_path = sliding if sliding.exists() else \
+            Path(config.FOLDS_DIR) / f"val_{patient}.json"
     if not manifest_path.exists():
         raise FileNotFoundError(
             f"No clip manifest at {manifest_path}. Test-time clips come from Stage 3 "

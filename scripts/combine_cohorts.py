@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import numpy as np
 
 import config
+from src.eval.stats import sign_flip_p
 
 RUNS = [("8-patient", "", "Phase 1 backbones, 5 training patients per fold"),
         ("14-patient", "alldata", "all-data backbones, 11 training patients per fold")]
@@ -58,18 +59,6 @@ def eval_pairs_for(fold):
         p, n = per.get(src, (0, 0))
         per[src] = (p + int(lab == 1.0), n + int(lab == 0.0))
     return int(sum(p * n for p, n in per.values()))
-
-
-def sign_flip_p(d):
-    """Exact two-sided paired permutation test: all 2^n sign assignments."""
-    d = np.asarray([x for x in d if np.isfinite(x)], dtype=float)
-    n = len(d)
-    if n == 0:
-        return float("nan"), 0
-    obs = abs(d.mean())
-    hit = sum(1 for s in product([1, -1], repeat=n)
-              if abs(float(np.dot(s, d)) / n) >= obs - 1e-15)
-    return hit / 2 ** n, n
 
 
 def load(name):
