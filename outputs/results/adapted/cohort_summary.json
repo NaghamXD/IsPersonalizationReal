@@ -1,0 +1,189 @@
+{
+  "rows": [
+    {
+      "fold": "pat01",
+      "tag": null,
+      "baseline_auc": 0.6037248144220573,
+      "adapted_auc": 0.6165827147401909,
+      "shuffled_auc": {
+        "pat02": 0.6175106044538706,
+        "pat03": 0.6133351007423118,
+        "pat04": 0.617908271474019,
+        "pat06": 0.6159199363732768,
+        "pat07": 0.6174443266171792,
+        "pat08": 0.6166489925768823,
+        "pat09": 0.6167815482502651
+      },
+      "backbone": "outputs/lopo/checkpoints/pat01/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat01",
+      "shuffled_mean": 0.6165069686411151,
+      "shuffled_sd": 0.0015465279424394039,
+      "z_score": 0.04897816392267265,
+      "verdict": "no personalisation detected",
+      "atypicality": 6.478081226348877
+    },
+    {
+      "fold": "pat02",
+      "tag": null,
+      "baseline_auc": 0.8638427947598253,
+      "adapted_auc": 0.8622707423580787,
+      "shuffled_auc": {
+        "pat01": 0.8618340611353712,
+        "pat03": 0.8629257641921397,
+        "pat04": 0.8627510917030567,
+        "pat06": 0.8624890829694323,
+        "pat07": 0.8624890829694323,
+        "pat08": 0.8620524017467249,
+        "pat09": 0.862532751091703
+      },
+      "backbone": "outputs/lopo/checkpoints/pat02/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat02",
+      "shuffled_mean": 0.8624391765439802,
+      "shuffled_sd": 0.00037937569459912403,
+      "z_score": -0.44397727186896174,
+      "verdict": "no personalisation detected",
+      "atypicality": 4.018587112426758
+    },
+    {
+      "fold": "pat03",
+      "tag": null,
+      "baseline_auc": 0.8536585365853658,
+      "adapted_auc": 0.8536585365853658,
+      "shuffled_auc": {
+        "pat01": 0.8536585365853658,
+        "pat02": 0.8536585365853658,
+        "pat04": 0.8536585365853658,
+        "pat06": 0.8536585365853658,
+        "pat07": 0.8536585365853658,
+        "pat08": 0.8536585365853658,
+        "pat09": 0.8536585365853658
+      },
+      "backbone": "outputs/lopo/checkpoints/pat03/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat03",
+      "shuffled_mean": 0.8536585365853658,
+      "shuffled_sd": 0.0,
+      "z_score": NaN,
+      "verdict": "no personalisation detected",
+      "atypicality": 5.575324058532715
+    },
+    {
+      "fold": "pat04",
+      "tag": null,
+      "baseline_auc": 0.7142857142857143,
+      "adapted_auc": 0.8571428571428571,
+      "shuffled_auc": {
+        "pat01": 0.8571428571428571,
+        "pat02": 0.8571428571428571,
+        "pat03": 0.8571428571428571,
+        "pat06": 0.8571428571428571,
+        "pat07": 0.8571428571428571,
+        "pat08": 0.8571428571428571,
+        "pat09": 0.8571428571428571
+      },
+      "backbone": "outputs/lopo/checkpoints/pat04/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat04",
+      "shuffled_mean": 0.857142857142857,
+      "shuffled_sd": 1.199177923332954e-16,
+      "z_score": 0.9258200997725514,
+      "verdict": "no personalisation detected",
+      "atypicality": 6.514874458312988
+    },
+    {
+      "fold": "pat06",
+      "tag": null,
+      "baseline_auc": 0.5257048092868989,
+      "adapted_auc": 0.4904643449419569,
+      "shuffled_auc": {
+        "pat01": 0.4859038142620232,
+        "pat02": 0.49502487562189057,
+        "pat03": 0.4879767827529022,
+        "pat04": 0.4975124378109453,
+        "pat07": 0.4987562189054726,
+        "pat08": 0.49129353233830847,
+        "pat09": 0.48714759535655056
+      },
+      "backbone": "outputs/lopo/checkpoints/pat06/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat06",
+      "shuffled_mean": 0.49194503672115614,
+      "shuffled_sd": 0.005205075652059988,
+      "z_score": -0.28447075089355,
+      "verdict": "no personalisation detected",
+      "atypicality": 9.557404518127441
+    },
+    {
+      "fold": "pat07",
+      "tag": null,
+      "baseline_auc": 0.9666666666666667,
+      "adapted_auc": 0.9473684210526315,
+      "shuffled_auc": {
+        "pat01": 0.9473684210526315,
+        "pat02": 0.9473684210526315,
+        "pat03": 0.9473684210526315,
+        "pat04": 0.9473684210526315,
+        "pat06": 0.947953216374269,
+        "pat08": 0.9473684210526315,
+        "pat09": 0.947953216374269
+      },
+      "backbone": "outputs/lopo/checkpoints/pat07/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat07",
+      "shuffled_mean": 0.9475355054302422,
+      "shuffled_sd": 0.00028535089852298185,
+      "z_score": -0.5855400437691199,
+      "verdict": "no personalisation detected",
+      "atypicality": 3.5612659454345703
+    },
+    {
+      "fold": "pat08",
+      "tag": null,
+      "baseline_auc": 0.7138687709436817,
+      "adapted_auc": 0.7186250135120528,
+      "shuffled_auc": {
+        "pat01": 0.7179764349800022,
+        "pat02": 0.7184088206680359,
+        "pat03": 0.7198140741541454,
+        "pat04": 0.7194897848881202,
+        "pat06": 0.7199221705761539,
+        "pat07": 0.7188412063560696,
+        "pat09": 0.7178683385579937
+      },
+      "backbone": "outputs/lopo/checkpoints/pat08/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat08",
+      "shuffled_mean": 0.7189029757400744,
+      "shuffled_sd": 0.0008553907470551086,
+      "z_score": -0.3249535127409671,
+      "verdict": "no personalisation detected",
+      "atypicality": 3.39321231842041
+    },
+    {
+      "fold": "pat09",
+      "tag": null,
+      "baseline_auc": 0.1799000555247085,
+      "adapted_auc": 0.18822876179900055,
+      "shuffled_auc": {
+        "pat01": 0.18822876179900055,
+        "pat02": 0.18933925596890616,
+        "pat03": 0.18878400888395336,
+        "pat04": 0.18933925596890616,
+        "pat06": 0.18989450305385897,
+        "pat07": 0.18878400888395336,
+        "pat08": 0.18933925596890616
+      },
+      "backbone": "outputs/lopo/checkpoints/pat09/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat09",
+      "shuffled_mean": 0.18910129293249783,
+      "shuffled_sd": 0.0005418656707099013,
+      "z_score": -1.610235120365109,
+      "verdict": "no personalisation detected",
+      "atypicality": 5.10856819152832
+    }
+  ],
+  "own_minus_shuffled_mean": -0.0003613697006443137,
+  "paired_t": -1.8894896486859765,
+  "paired_p_normal_approx": 0.05882624850479368,
+  "sign_test": {
+    "positive": 2,
+    "n": 7,
+    "p": 0.453125
+  },
+  "n_folds_passing_D28": 0
+}

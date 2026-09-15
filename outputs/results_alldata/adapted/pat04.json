@@ -1,0 +1,21 @@
+{
+  "fold": "pat04",
+  "tag": null,
+  "baseline_auc": 1.0,
+  "adapted_auc": 1.0,
+  "shuffled_auc": {
+    "pat01": 1.0,
+    "pat02": 1.0,
+    "pat03": 1.0,
+    "pat06": 1.0,
+    "pat07": 1.0,
+    "pat08": 1.0,
+    "pat09": 1.0
+  },
+  "backbone": "outputs/lopo_alldata/checkpoints/pat04/final_model.pth",
+  "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat04",
+  "shuffled_mean": 1.0,
+  "shuffled_sd": 0.0,
+  "z_score": NaN,
+  "verdict": "no personalisation detected"
+}

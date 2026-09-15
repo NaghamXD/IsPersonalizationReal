@@ -30,6 +30,9 @@ outputs/**/*.json
 !outputs/**/run_manifest.json
 !outputs/**/per_fold.json
 !outputs/**/pooled.json
+# ...and the result records themselves. These are the analysis inputs for the paper,
+# a few KB each, and they were sitting outside version control until 2026-09-15.
+!outputs/results*/**/*.json
 outputs/**/*.csv
 outputs/**/*.png
 !outputs/*.pdf

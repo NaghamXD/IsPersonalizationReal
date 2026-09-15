@@ -1,0 +1,21 @@
+{
+  "fold": "pat01",
+  "tag": "gentle",
+  "baseline_auc": 0.6037248144220573,
+  "adapted_auc": 0.6553552492046659,
+  "shuffled_auc": {
+    "pat02": 0.660193531283139,
+    "pat03": 0.6577412513255567,
+    "pat04": 0.6341463414634146,
+    "pat06": 0.6912778366914104,
+    "pat07": 0.6391171792152704,
+    "pat08": 0.7004904559915165,
+    "pat09": 0.6617179215270413
+  },
+  "backbone": "outputs/lopo/checkpoints/pat01/final_model.pth",
+  "hypernetwork": "outputs/lopo_hypernetwork/checkpoints/pat01_gentle",
+  "shuffled_mean": 0.6635263596424784,
+  "shuffled_sd": 0.024641861828188425,
+  "z_score": -0.3315946860989764,
+  "verdict": "no personalisation detected"
+}

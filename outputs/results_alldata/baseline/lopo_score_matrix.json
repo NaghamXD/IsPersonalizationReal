@@ -1,0 +1,629 @@
+{
+  "pat01|pat01": {
+    "fold": "pat01",
+    "patient": "pat01",
+    "role": "held_out",
+    "within_source": 0.7680275715800636,
+    "pooled": 0.8018703784254023,
+    "n_ictal": 38,
+    "n_interictal": 484,
+    "mean_prob": 0.4309069812297821,
+    "frac_above_0.9": 0.25426944971537,
+    "per_source": {
+      "pat01_Sz1": {
+        "auc": 0.9215277777777777,
+        "n_pos": 12,
+        "n_neg": 360
+      },
+      "pat01_Sz2": {
+        "auc": 0.5623449131513648,
+        "n_pos": 26,
+        "n_neg": 124
+      }
+    }
+  },
+  "pat01|pat04": {
+    "fold": "pat01",
+    "patient": "pat04",
+    "role": "internal_val",
+    "within_source": 0.21428571428571427,
+    "pooled": 0.3942232630757221,
+    "n_ictal": 7,
+    "n_interictal": 549,
+    "mean_prob": 0.6902473568916321,
+    "frac_above_0.9": 0.5116279069767442,
+    "per_source": {
+      "pat04_Sz1": {
+        "auc": 0.21428571428571427,
+        "n_pos": 7,
+        "n_neg": 2
+      },
+      "pat04_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 356
+      },
+      "pat04_free2": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 191
+      }
+    }
+  },
+  "pat01|pat07": {
+    "fold": "pat01",
+    "patient": "pat07",
+    "role": "internal_val",
+    "within_source": 0.92046783625731,
+    "pooled": 0.9258261933904529,
+    "n_ictal": 43,
+    "n_interictal": 95,
+    "mean_prob": 0.3736312985420227,
+    "frac_above_0.9": 0.26282051282051283,
+    "per_source": {
+      "pat07_Sz1": {
+        "auc": NaN,
+        "n_pos": 25,
+        "n_neg": 0
+      },
+      "pat07_Sz2": {
+        "auc": 0.92046783625731,
+        "n_pos": 18,
+        "n_neg": 95
+      }
+    }
+  },
+  "pat02|pat02": {
+    "fold": "pat02",
+    "patient": "pat02",
+    "role": "held_out",
+    "within_source": 0.7023580786026201,
+    "pooled": 0.7640174672489083,
+    "n_ictal": 50,
+    "n_interictal": 458,
+    "mean_prob": 0.625580370426178,
+    "frac_above_0.9": 0.3154875717017208,
+    "per_source": {
+      "pat02_Sz1": {
+        "auc": 0.6825555555555556,
+        "n_pos": 25,
+        "n_neg": 360
+      },
+      "pat02_Sz2": {
+        "auc": 0.7751020408163265,
+        "n_pos": 25,
+        "n_neg": 98
+      }
+    }
+  },
+  "pat02|pat01": {
+    "fold": "pat02",
+    "patient": "pat01",
+    "role": "internal_val",
+    "within_source": 0.898727465535525,
+    "pooled": 0.8617877337973032,
+    "n_ictal": 38,
+    "n_interictal": 484,
+    "mean_prob": 0.5458526015281677,
+    "frac_above_0.9": 0.36622390891840606,
+    "per_source": {
+      "pat01_Sz1": {
+        "auc": 0.9587962962962963,
+        "n_pos": 12,
+        "n_neg": 360
+      },
+      "pat01_Sz2": {
+        "auc": 0.8182382133995038,
+        "n_pos": 26,
+        "n_neg": 124
+      }
+    }
+  },
+  "pat02|pat08": {
+    "fold": "pat02",
+    "patient": "pat08",
+    "role": "internal_val",
+    "within_source": 0.8794724894605989,
+    "pooled": 0.86692547826783,
+    "n_ictal": 62,
+    "n_interictal": 403,
+    "mean_prob": 0.35126951336860657,
+    "frac_above_0.9": 0.1416490486257928,
+    "per_source": {
+      "pat08_Sz1": {
+        "auc": 0.8955648535564854,
+        "n_pos": 25,
+        "n_neg": 239
+      },
+      "pat08_Sz2": {
+        "auc": 0.8497596153846154,
+        "n_pos": 24,
+        "n_neg": 104
+      },
+      "pat08_Sz3": {
+        "auc": 0.8512820512820513,
+        "n_pos": 13,
+        "n_neg": 60
+      }
+    }
+  },
+  "pat03|pat03": {
+    "fold": "pat03",
+    "patient": "pat03",
+    "role": "held_out",
+    "within_source": 0.8536585365853658,
+    "pooled": 0.9443072702331962,
+    "n_ictal": 27,
+    "n_interictal": 135,
+    "mean_prob": 0.2156032770872116,
+    "frac_above_0.9": 0.13496932515337423,
+    "per_source": {
+      "pat03_Sz1": {
+        "auc": 1.0,
+        "n_pos": 13,
+        "n_neg": 1
+      },
+      "pat03_Sz2": {
+        "auc": 0.7857142857142857,
+        "n_pos": 14,
+        "n_neg": 2
+      },
+      "pat03_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 132
+      }
+    }
+  },
+  "pat03|pat02": {
+    "fold": "pat03",
+    "patient": "pat02",
+    "role": "internal_val",
+    "within_source": 0.7058515283842794,
+    "pooled": 0.7469868995633188,
+    "n_ictal": 50,
+    "n_interictal": 458,
+    "mean_prob": 0.5409898161888123,
+    "frac_above_0.9": 0.361376673040153,
+    "per_source": {
+      "pat02_Sz1": {
+        "auc": 0.7076666666666667,
+        "n_pos": 25,
+        "n_neg": 360
+      },
+      "pat02_Sz2": {
+        "auc": 0.6991836734693877,
+        "n_pos": 25,
+        "n_neg": 98
+      }
+    }
+  },
+  "pat03|pat04": {
+    "fold": "pat03",
+    "patient": "pat04",
+    "role": "internal_val",
+    "within_source": 0.6428571428571429,
+    "pooled": 0.5180848295602394,
+    "n_ictal": 7,
+    "n_interictal": 549,
+    "mean_prob": 0.8005082607269287,
+    "frac_above_0.9": 0.5742397137745975,
+    "per_source": {
+      "pat04_Sz1": {
+        "auc": 0.6428571428571429,
+        "n_pos": 7,
+        "n_neg": 2
+      },
+      "pat04_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 356
+      },
+      "pat04_free2": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 191
+      }
+    }
+  },
+  "pat04|pat04": {
+    "fold": "pat04",
+    "patient": "pat04",
+    "role": "held_out",
+    "within_source": 1.0,
+    "pooled": 0.6316679677335415,
+    "n_ictal": 7,
+    "n_interictal": 549,
+    "mean_prob": 0.84935063123703,
+    "frac_above_0.9": 0.7066189624329159,
+    "per_source": {
+      "pat04_Sz1": {
+        "auc": 1.0,
+        "n_pos": 7,
+        "n_neg": 2
+      },
+      "pat04_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 356
+      },
+      "pat04_free2": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 191
+      }
+    }
+  },
+  "pat04|pat03": {
+    "fold": "pat04",
+    "patient": "pat03",
+    "role": "internal_val",
+    "within_source": 0.6829268292682927,
+    "pooled": 0.8861454046639232,
+    "n_ictal": 27,
+    "n_interictal": 135,
+    "mean_prob": 0.563862144947052,
+    "frac_above_0.9": 0.43558282208588955,
+    "per_source": {
+      "pat03_Sz1": {
+        "auc": 0.6153846153846154,
+        "n_pos": 13,
+        "n_neg": 1
+      },
+      "pat03_Sz2": {
+        "auc": 0.7142857142857143,
+        "n_pos": 14,
+        "n_neg": 2
+      },
+      "pat03_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 132
+      }
+    }
+  },
+  "pat04|pat08": {
+    "fold": "pat04",
+    "patient": "pat08",
+    "role": "internal_val",
+    "within_source": 0.6427413252621338,
+    "pooled": 0.7026734971584087,
+    "n_ictal": 62,
+    "n_interictal": 403,
+    "mean_prob": 0.6286218762397766,
+    "frac_above_0.9": 0.39323467230443976,
+    "per_source": {
+      "pat08_Sz1": {
+        "auc": 0.5512970711297072,
+        "n_pos": 25,
+        "n_neg": 239
+      },
+      "pat08_Sz2": {
+        "auc": 0.8064903846153846,
+        "n_pos": 24,
+        "n_neg": 104
+      },
+      "pat08_Sz3": {
+        "auc": 0.8192307692307692,
+        "n_pos": 13,
+        "n_neg": 60
+      }
+    }
+  },
+  "pat06|pat06": {
+    "fold": "pat06",
+    "patient": "pat06",
+    "role": "held_out",
+    "within_source": 0.6674958540630183,
+    "pooled": 0.6623263888888888,
+    "n_ictal": 64,
+    "n_interictal": 72,
+    "mean_prob": 0.8245234489440918,
+    "frac_above_0.9": 0.7153284671532847,
+    "per_source": {
+      "pat06_Sz1": {
+        "auc": 0.5687830687830688,
+        "n_pos": 14,
+        "n_neg": 54
+      },
+      "pat06_Sz2": {
+        "auc": 0.6666666666666666,
+        "n_pos": 25,
+        "n_neg": 9
+      },
+      "pat06_Sz3": {
+        "auc": 1.0,
+        "n_pos": 25,
+        "n_neg": 9
+      }
+    }
+  },
+  "pat06|pat01": {
+    "fold": "pat06",
+    "patient": "pat01",
+    "role": "internal_val",
+    "within_source": 0.8852067868504772,
+    "pooled": 0.8999565028273162,
+    "n_ictal": 38,
+    "n_interictal": 484,
+    "mean_prob": 0.6321508884429932,
+    "frac_above_0.9": 0.43263757115749524,
+    "per_source": {
+      "pat01_Sz1": {
+        "auc": 0.9400462962962963,
+        "n_pos": 12,
+        "n_neg": 360
+      },
+      "pat01_Sz2": {
+        "auc": 0.8117245657568238,
+        "n_pos": 26,
+        "n_neg": 124
+      }
+    }
+  },
+  "pat06|pat08": {
+    "fold": "pat06",
+    "patient": "pat08",
+    "role": "internal_val",
+    "within_source": 0.6286887904010378,
+    "pooled": 0.5619546946289923,
+    "n_ictal": 62,
+    "n_interictal": 403,
+    "mean_prob": 0.510319709777832,
+    "frac_above_0.9": 0.3086680761099366,
+    "per_source": {
+      "pat08_Sz1": {
+        "auc": 0.6999163179916318,
+        "n_pos": 25,
+        "n_neg": 239
+      },
+      "pat08_Sz2": {
+        "auc": 0.5084134615384616,
+        "n_pos": 24,
+        "n_neg": 104
+      },
+      "pat08_Sz3": {
+        "auc": 0.46794871794871795,
+        "n_pos": 13,
+        "n_neg": 60
+      }
+    }
+  },
+  "pat07|pat07": {
+    "fold": "pat07",
+    "patient": "pat07",
+    "role": "held_out",
+    "within_source": 0.552046783625731,
+    "pooled": 0.5623011015911873,
+    "n_ictal": 43,
+    "n_interictal": 95,
+    "mean_prob": 0.5663012266159058,
+    "frac_above_0.9": 0.40384615384615385,
+    "per_source": {
+      "pat07_Sz1": {
+        "auc": NaN,
+        "n_pos": 25,
+        "n_neg": 0
+      },
+      "pat07_Sz2": {
+        "auc": 0.552046783625731,
+        "n_pos": 18,
+        "n_neg": 95
+      }
+    }
+  },
+  "pat07|pat02": {
+    "fold": "pat07",
+    "patient": "pat02",
+    "role": "internal_val",
+    "within_source": 0.5324890829694323,
+    "pooled": 0.5924017467248909,
+    "n_ictal": 50,
+    "n_interictal": 458,
+    "mean_prob": 0.4376605451107025,
+    "frac_above_0.9": 0.2734225621414914,
+    "per_source": {
+      "pat02_Sz1": {
+        "auc": 0.5234444444444445,
+        "n_pos": 25,
+        "n_neg": 360
+      },
+      "pat02_Sz2": {
+        "auc": 0.5657142857142857,
+        "n_pos": 25,
+        "n_neg": 98
+      }
+    }
+  },
+  "pat07|pat04": {
+    "fold": "pat07",
+    "patient": "pat04",
+    "role": "internal_val",
+    "within_source": 0.5714285714285714,
+    "pooled": 0.5932864949258392,
+    "n_ictal": 7,
+    "n_interictal": 549,
+    "mean_prob": 0.7471588850021362,
+    "frac_above_0.9": 0.5760286225402504,
+    "per_source": {
+      "pat04_Sz1": {
+        "auc": 0.5714285714285714,
+        "n_pos": 7,
+        "n_neg": 2
+      },
+      "pat04_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 356
+      },
+      "pat04_free2": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 191
+      }
+    }
+  },
+  "pat08|pat08": {
+    "fold": "pat08",
+    "patient": "pat08",
+    "role": "held_out",
+    "within_source": 0.5972327315965842,
+    "pooled": 0.6364764267990074,
+    "n_ictal": 62,
+    "n_interictal": 403,
+    "mean_prob": 0.5462803244590759,
+    "frac_above_0.9": 0.3086680761099366,
+    "per_source": {
+      "pat08_Sz1": {
+        "auc": 0.500418410041841,
+        "n_pos": 25,
+        "n_neg": 239
+      },
+      "pat08_Sz2": {
+        "auc": 0.8497596153846154,
+        "n_pos": 24,
+        "n_neg": 104
+      },
+      "pat08_Sz3": {
+        "auc": 0.5307692307692308,
+        "n_pos": 13,
+        "n_neg": 60
+      }
+    }
+  },
+  "pat08|pat03": {
+    "fold": "pat08",
+    "patient": "pat03",
+    "role": "internal_val",
+    "within_source": 1.0,
+    "pooled": 0.9536351165980795,
+    "n_ictal": 27,
+    "n_interictal": 135,
+    "mean_prob": 0.5011711716651917,
+    "frac_above_0.9": 0.22699386503067484,
+    "per_source": {
+      "pat03_Sz1": {
+        "auc": 1.0,
+        "n_pos": 13,
+        "n_neg": 1
+      },
+      "pat03_Sz2": {
+        "auc": 1.0,
+        "n_pos": 14,
+        "n_neg": 2
+      },
+      "pat03_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 132
+      }
+    }
+  },
+  "pat08|pat04": {
+    "fold": "pat08",
+    "patient": "pat04",
+    "role": "internal_val",
+    "within_source": 1.0,
+    "pooled": 0.7501951600312255,
+    "n_ictal": 7,
+    "n_interictal": 549,
+    "mean_prob": 0.5996120572090149,
+    "frac_above_0.9": 0.33989266547406083,
+    "per_source": {
+      "pat04_Sz1": {
+        "auc": 1.0,
+        "n_pos": 7,
+        "n_neg": 2
+      },
+      "pat04_free": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 356
+      },
+      "pat04_free2": {
+        "auc": NaN,
+        "n_pos": 0,
+        "n_neg": 191
+      }
+    }
+  },
+  "pat09|pat09": {
+    "fold": "pat09",
+    "patient": "pat09",
+    "role": "held_out",
+    "within_source": 0.5669072737368129,
+    "pooled": 0.6277665995975855,
+    "n_ictal": 71,
+    "n_interictal": 77,
+    "mean_prob": 0.8603646755218506,
+    "frac_above_0.9": 0.5827814569536424,
+    "per_source": {
+      "pat09_Sz1": {
+        "auc": 0.3870967741935484,
+        "n_pos": 20,
+        "n_neg": 31
+      },
+      "pat09_Sz2": {
+        "auc": 0.7593052109181141,
+        "n_pos": 26,
+        "n_neg": 31
+      },
+      "pat09_Sz3": {
+        "auc": 0.45066666666666666,
+        "n_pos": 25,
+        "n_neg": 15
+      }
+    }
+  },
+  "pat09|pat01": {
+    "fold": "pat09",
+    "patient": "pat01",
+    "role": "internal_val",
+    "within_source": 0.5535524920466596,
+    "pooled": 0.5266420182688125,
+    "n_ictal": 38,
+    "n_interictal": 484,
+    "mean_prob": 0.4869738519191742,
+    "frac_above_0.9": 0.286527514231499,
+    "per_source": {
+      "pat01_Sz1": {
+        "auc": 0.7592592592592593,
+        "n_pos": 12,
+        "n_neg": 360
+      },
+      "pat01_Sz2": {
+        "auc": 0.27791563275434245,
+        "n_pos": 26,
+        "n_neg": 124
+      }
+    }
+  },
+  "pat09|pat06": {
+    "fold": "pat09",
+    "patient": "pat06",
+    "role": "internal_val",
+    "within_source": 0.7048092868988391,
+    "pooled": 0.6276041666666666,
+    "n_ictal": 64,
+    "n_interictal": 72,
+    "mean_prob": 0.8414580821990967,
+    "frac_above_0.9": 0.708029197080292,
+    "per_source": {
+      "pat06_Sz1": {
+        "auc": 0.5674603174603174,
+        "n_pos": 14,
+        "n_neg": 54
+      },
+      "pat06_Sz2": {
+        "auc": 0.9155555555555556,
+        "n_pos": 25,
+        "n_neg": 9
+      },
+      "pat06_Sz3": {
+        "auc": 0.9555555555555556,
+        "n_pos": 25,
+        "n_neg": 9
+      }
+    }
+  }
+}

@@ -1,0 +1,189 @@
+{
+  "rows": [
+    {
+      "fold": "pat01",
+      "tag": null,
+      "baseline_auc": 0.7680275715800636,
+      "adapted_auc": 0.7611346765641569,
+      "shuffled_auc": {
+        "pat02": 0.7645811240721103,
+        "pat03": 0.7612672322375398,
+        "pat04": 0.7611346765641569,
+        "pat06": 0.7607370095440085,
+        "pat07": 0.7604718981972428,
+        "pat08": 0.7624602332979852,
+        "pat09": 0.7612672322375398
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat01/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat01",
+      "shuffled_mean": 0.761702772307226,
+      "shuffled_sd": 0.0014147159845870597,
+      "z_score": -0.4015616910096435,
+      "verdict": "no personalisation detected",
+      "atypicality": 5.882014274597168
+    },
+    {
+      "fold": "pat02",
+      "tag": null,
+      "baseline_auc": 0.7023580786026201,
+      "adapted_auc": 0.7063755458515284,
+      "shuffled_auc": {
+        "pat01": 0.7074672489082969,
+        "pat03": 0.7071615720524018,
+        "pat04": 0.7077729257641922,
+        "pat06": 0.7080349344978166,
+        "pat07": 0.7065938864628821,
+        "pat08": 0.708471615720524,
+        "pat09": 0.7081222707423581
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat02/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat02",
+      "shuffled_mean": 0.7076606363069244,
+      "shuffled_sd": 0.0006387384787002015,
+      "z_score": -2.0119195856356313,
+      "verdict": "no personalisation detected",
+      "atypicality": 5.059535503387451
+    },
+    {
+      "fold": "pat03",
+      "tag": null,
+      "baseline_auc": 0.8536585365853658,
+      "adapted_auc": 0.8780487804878049,
+      "shuffled_auc": {
+        "pat01": 0.8780487804878049,
+        "pat02": 0.8536585365853658,
+        "pat04": 0.8536585365853658,
+        "pat06": 0.8658536585365854,
+        "pat07": 0.8780487804878049,
+        "pat08": 0.8780487804878049,
+        "pat09": 0.8780487804878049
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat03/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat03",
+      "shuffled_mean": 0.8693379790940766,
+      "shuffled_sd": 0.011599874770870034,
+      "z_score": 0.750939261482641,
+      "verdict": "no personalisation detected",
+      "atypicality": 6.58622407913208
+    },
+    {
+      "fold": "pat04",
+      "tag": null,
+      "baseline_auc": 1.0,
+      "adapted_auc": 1.0,
+      "shuffled_auc": {
+        "pat01": 1.0,
+        "pat02": 1.0,
+        "pat03": 1.0,
+        "pat06": 1.0,
+        "pat07": 1.0,
+        "pat08": 1.0,
+        "pat09": 1.0
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat04/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat04",
+      "shuffled_mean": 1.0,
+      "shuffled_sd": 0.0,
+      "z_score": NaN,
+      "verdict": "no personalisation detected",
+      "atypicality": 8.508753776550293
+    },
+    {
+      "fold": "pat06",
+      "tag": null,
+      "baseline_auc": 0.6674958540630183,
+      "adapted_auc": 0.6359867330016584,
+      "shuffled_auc": {
+        "pat01": 0.6351575456053068,
+        "pat02": 0.6343283582089553,
+        "pat03": 0.6368159203980099,
+        "pat04": 0.6343283582089553,
+        "pat07": 0.6334991708126037,
+        "pat08": 0.6351575456053068,
+        "pat09": 0.6384742951907131
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat06/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat06",
+      "shuffled_mean": 0.6353944562899787,
+      "shuffled_sd": 0.0017070177936679336,
+      "z_score": 0.346965751544435,
+      "verdict": "no personalisation detected",
+      "atypicality": 9.740721702575684
+    },
+    {
+      "fold": "pat07",
+      "tag": null,
+      "baseline_auc": 0.552046783625731,
+      "adapted_auc": 0.5883040935672514,
+      "shuffled_auc": {
+        "pat01": 0.5900584795321637,
+        "pat02": 0.5888888888888889,
+        "pat03": 0.591812865497076,
+        "pat04": 0.5883040935672514,
+        "pat06": 0.5921052631578947,
+        "pat08": 0.5915204678362573,
+        "pat09": 0.5906432748538012
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat07/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat07",
+      "shuffled_mean": 0.5904761904761905,
+      "shuffled_sd": 0.0014703187892061817,
+      "z_score": -1.4772965732905803,
+      "verdict": "no personalisation detected",
+      "atypicality": 8.31743335723877
+    },
+    {
+      "fold": "pat08",
+      "tag": null,
+      "baseline_auc": 0.5972327315965842,
+      "adapted_auc": 0.6127986163657982,
+      "shuffled_auc": {
+        "pat01": 0.6130148092098151,
+        "pat02": 0.6158253161820344,
+        "pat03": 0.6156091233380175,
+        "pat04": 0.6121500378337477,
+        "pat06": 0.6160415090260513,
+        "pat07": 0.6136633877418658,
+        "pat09": 0.6133390984758404
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat08/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat08",
+      "shuffled_mean": 0.6142347545439103,
+      "shuffled_sd": 0.0015623757476028362,
+      "z_score": -0.9192015303076312,
+      "verdict": "no personalisation detected",
+      "atypicality": 4.2851762771606445
+    },
+    {
+      "fold": "pat09",
+      "tag": null,
+      "baseline_auc": 0.5666296501943365,
+      "adapted_auc": 0.5385896724042198,
+      "shuffled_auc": {
+        "pat01": 0.539422543031649,
+        "pat02": 0.5372015546918378,
+        "pat03": 0.5363686840644086,
+        "pat04": 0.5358134369794558,
+        "pat06": 0.5388672959466962,
+        "pat07": 0.5397001665741255,
+        "pat08": 0.5372015546918378
+      },
+      "backbone": "outputs/lopo_alldata/checkpoints/pat09/final_model.pth",
+      "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat09",
+      "shuffled_mean": 0.5377964622828587,
+      "shuffled_sd": 0.001532627561004672,
+      "z_score": 0.5175491695067553,
+      "verdict": "no personalisation detected",
+      "atypicality": 5.424075126647949
+    }
+  ],
+  "own_minus_shuffled_mean": 0.0005793583676566016,
+  "paired_t": 0.47609330986220566,
+  "paired_p_normal_approx": 0.6340079030155596,
+  "sign_test": {
+    "positive": 3,
+    "n": 7,
+    "p": 1.0
+  },
+  "n_folds_passing_D28": 0
+}

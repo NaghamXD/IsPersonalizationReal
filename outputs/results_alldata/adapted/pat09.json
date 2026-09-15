@@ -1,0 +1,21 @@
+{
+  "fold": "pat09",
+  "tag": null,
+  "baseline_auc": 0.5666296501943365,
+  "adapted_auc": 0.5385896724042198,
+  "shuffled_auc": {
+    "pat01": 0.539422543031649,
+    "pat02": 0.5372015546918378,
+    "pat03": 0.5363686840644086,
+    "pat04": 0.5358134369794558,
+    "pat06": 0.5388672959466962,
+    "pat07": 0.5397001665741255,
+    "pat08": 0.5372015546918378
+  },
+  "backbone": "outputs/lopo_alldata/checkpoints/pat09/final_model.pth",
+  "hypernetwork": "outputs/lopo_hypernetwork_alldata/checkpoints/pat09",
+  "shuffled_mean": 0.5377964622828587,
+  "shuffled_sd": 0.001532627561004672,
+  "z_score": 0.5175491695067553,
+  "verdict": "no personalisation detected"
+}
